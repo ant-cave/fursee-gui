@@ -12,30 +12,26 @@ fi
 
 python3 -c "import websockets" 2>/dev/null || pip install websockets --quiet
 
-API_ONLY=false
+WITH_FRONTEND=false
 PORT=8898
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --api-only) API_ONLY=true; shift ;;
+    --with-frontend) WITH_FRONTEND=true; shift ;;
     --port) PORT="$2"; shift 2 ;;
     *) PORT="$1"; shift ;;
   esac
 done
 
-if [ "$API_ONLY" = false ]; then
-    if [ -f fursee_ui/dist/index.html ]; then
-        echo "[..] 前端 dist 已存在，跳过构建（使用 --api-only 完全跳过）"
-    else
-        echo "[..] 正在构建前端..."
-        cd fursee_ui
-        npm install --silent
-        npm run build --silent
-        cd ..
-        echo "[OK] 前端构建完成"
-    fi
+if [ "$WITH_FRONTEND" = true ]; then
+    echo "[..] 正在构建前端..."
+    cd fursee_ui
+    npm install --silent
+    npm run build --silent
+    cd ..
+    echo "[OK] 前端构建完成"
+    export FURSEE_SERVE_FRONTEND=true
 fi
 
-echo "[..] 启动服务: http://0.0.0.0:${PORT}${API_ONLY:+ (仅后端模式)}"
-export FURSEE_API_ONLY=$API_ONLY
+echo "[..] 启动服务: http://0.0.0.0:${PORT}"
 exec uvicorn fursee_api.main:app --host 0.0.0.0 --port "$PORT"
