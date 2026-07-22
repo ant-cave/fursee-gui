@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+venv/
+fursee_ui/node_modules/
+fursee_ui/dist/
+buffer/
+output/
+input/
+fursee_models/*.pt
+fursee_models/*.safetensors
+.vscode/
+.idea/
+*.log
