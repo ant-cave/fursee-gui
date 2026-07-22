@@ -31,9 +31,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Fursee API", version="1.0.0", lifespan=lifespan)
 
+API_ONLY = os.environ.get("FURSEE_API_ONLY", "").lower() in ("1", "true", "yes")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://me.011420.xyz", "http://me.011420.xyz"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -117,7 +119,7 @@ async def websocket_handler(websocket: WebSocket, task_id: str):
             pass
 
 
-if os.path.isdir(DIST_DIR):
+if not API_ONLY and os.path.isdir(DIST_DIR):
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_frontend(full_path: str):
         if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("openapi"):

@@ -36,5 +36,6 @@ if [ "$API_ONLY" = false ]; then
     fi
 fi
 
-echo "[..] 启动服务: http://0.0.0.0:${PORT}"
+echo "[..] 启动服务: http://0.0.0.0:${PORT}${API_ONLY:+ (仅后端模式)}"
+export FURSEE_API_ONLY=$API_ONLY
 exec uvicorn fursee_api.main:app --host 0.0.0.0 --port "$PORT"
