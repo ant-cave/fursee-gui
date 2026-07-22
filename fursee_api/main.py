@@ -35,10 +35,9 @@ SERVE_FRONTEND = os.environ.get("FURSEE_SERVE_FRONTEND", "").lower() in ("1", "t
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://me.011420.xyz", "http://me.011420.xyz"],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 app.include_router(images.router)
