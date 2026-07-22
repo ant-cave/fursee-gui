@@ -493,6 +493,10 @@ def _auto_run(params: dict) -> dict:
 
     tq = _ProgressTqdm.write
 
+    from utils.common import reset_directory
+    reset_directory(input_folder)
+    os.makedirs(input_folder, exist_ok=True)
+
     tq("Step 1/3: 检测并裁切目标...")
     crop_furry_detections(
         input_folder=input_folder,
