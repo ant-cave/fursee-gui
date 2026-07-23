@@ -257,10 +257,10 @@ def copy_cluster_outputs(keys, labels, input_img_root, output_root, crop_root=No
 
         label = int(labels[i])
         if label == -1:
-            cluster_folder = os.path.join(output_root, "special_noise")
+            cluster_folder = os.path.join(output_root, "未分类")
             noise_count += 1
         else:
-            cluster_folder = os.path.join(output_root, f"class_{label}")
+            cluster_folder = os.path.join(output_root, f"组_{label + 1}")
 
         src_path = resolve_source_image(keys[i], input_img_root, crop_root=crop_root)
         if src_path:
@@ -290,7 +290,7 @@ def copy_centroid_outputs(centroid_indices, keys, centroid_root, crop_root=None)
             print(f"Centroid crop image not found for feature key: {keys[index]}")
             continue
         extension = os.path.splitext(src_path)[1]
-        copy_image_to_folder(src_path, centroid_root, output_name=f"class_{label}{extension}")
+        copy_image_to_folder(src_path, centroid_root, output_name=f"组_{label + 1}{extension}")
         centroid_count += 1
     return centroid_count
 

@@ -110,12 +110,6 @@ const naiveDateLocale = computed(() => locale.value === 'zh' ? dateZhCN : dateEn
 const activeKey = computed(() => route.path)
 
 const menuOptions = computed(() => [
-  { label: t('nav.dashboard'), key: '/', icon: () => 'D' },
-  { label: t('nav.images'), key: '/images', icon: () => 'I' },
-  { label: t('nav.database'), key: '/database', icon: () => 'B' },
-  { label: t('nav.classify'), key: '/classify', icon: () => 'C' },
-  { label: t('nav.similar'), key: '/similar', icon: () => 'S' },
-  { label: t('nav.identify'), key: '/identify', icon: () => 'I' },
   { label: t('nav.auto'), key: '/auto', icon: () => '☆' },
 ])
 

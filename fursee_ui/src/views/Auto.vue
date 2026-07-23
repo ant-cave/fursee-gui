@@ -74,26 +74,27 @@
       </n-card>
     </template>
 
-    <n-card v-if="historyRuns.length" :title="$t('auto.history')" class="mb-12">
-      <n-collapse>
-        <n-collapse-item v-for="run in historyRuns" :key="run.run_id" :title="`${run.run_id} · ${run.total} ${$t('auto.images')}`" :name="run.run_id">
-          <div class="result-toolbar" style="margin-bottom:8px">
-            <n-button size="tiny" @click="downloadZip(run.run_id)" :loading="zipping">📦 {{ $t('auto.download_zip') }}</n-button>
-          </div>
-          <div v-for="entry in run.entries" :key="entry.name" style="margin-top:8px">
-            <div class="result-title">{{ entry.name }}</div>
-            <div class="result-grid">
-              <div v-for="img in entry.images" :key="img" class="result-img-wrap">
-                <img :src="`/api/results/auto/run/${run.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1`" :alt="img" class="result-img" />
-                <div class="result-label">{{ img }}</div>
+    <n-card :title="$t('auto.history')" class="mb-12">
+      <template v-if="historyRuns.length">
+        <n-collapse>
+          <n-collapse-item v-for="run in historyRuns" :key="run.run_id" :title="`${run.run_id} · ${run.total} ${$t('auto.images')}`" :name="run.run_id">
+            <div class="result-toolbar" style="margin-bottom:8px">
+              <n-button size="tiny" @click="downloadZip(run.run_id)" :loading="zipping">📦 {{ $t('auto.download_zip') }}</n-button>
+            </div>
+            <div v-for="entry in run.entries" :key="entry.name" style="margin-top:8px">
+              <div class="result-title">{{ entry.name }}</div>
+              <div class="result-grid">
+                <div v-for="img in entry.images" :key="img" class="result-img-wrap">
+                  <img :src="`/api/results/auto/run/${run.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1`" :alt="img" class="result-img" />
+                  <div class="result-label">{{ img }}</div>
+                </div>
               </div>
             </div>
-          </div>
-        </n-collapse-item>
-      </n-collapse>
+          </n-collapse-item>
+        </n-collapse>
+      </template>
+      <n-empty v-else :description="$t('auto.no_history')" style="margin:20px 0" />
     </n-card>
-
-    <n-empty v-if="!running && !currentRunId && !historyRuns.length" :description="$t('auto.no_history')" style="margin-top:20px" />
   </div>
 </template>
 

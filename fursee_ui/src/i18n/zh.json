@@ -94,7 +94,7 @@
   "auto.current_run": "当前运行",
   "auto.new_upload": "上传新图片",
   "auto.history": "历史记录",
-  "auto.no_history": "暂无历史记录。上传图片并运行即可开始。",
+  "auto.no_history": "暂无历史记录，拖拽或点击上传图片即可开始",
   "auto.images": " 张图片",
   "result.bytes": "字节",
   "common.submit": "提交",
