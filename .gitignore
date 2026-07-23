@@ -11,3 +11,4 @@ fursee_models/*.safetensors
 .vscode/
 .idea/
 *.log
+.data/

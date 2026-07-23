@@ -35,4 +35,4 @@ if [ "$API_ONLY" = false ]; then
 fi
 
 echo "[..] 启动服务: http://0.0.0.0:${PORT}"
-exec uvicorn fursee_api.main:app --host 0.0.0.0 --port "$PORT"
+exec uvicorn fursee_api.main:app --host localhost --port "$PORT"
