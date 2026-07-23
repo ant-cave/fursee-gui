@@ -1,8 +1,9 @@
 import io
+import json
 import os
 import zipfile
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 router = APIRouter(prefix="/api/results", tags=["results"])
@@ -13,7 +14,7 @@ RESULT_DIRS = {
     "identify": os.path.join("output", "identify"),
 }
 
-AUTO_DIR = os.path.join("output", "auto", "classify")
+AUTO_ROOT = os.path.join("output", "auto", "classify")
 
 
 THUMB_MAX_SIZE = 200
@@ -73,31 +74,73 @@ def _list_entries(base_dir: str):
     return entries
 
 
+def _fp_tag(request: Request) -> str:
+    fp = getattr(request.state, "fingerprint", "unknown")
+    if fp and fp != "unknown":
+        return f"fp_{fp}"
+    return ""
+
+
+def _auto_run_dir(request: Request) -> str:
+    tag = _fp_tag(request)
+    if tag:
+        return os.path.join(AUTO_ROOT, tag)
+    return AUTO_ROOT
+
+
+def _load_manifest(request: Request) -> dict:
+    run_dir = _auto_run_dir(request)
+    manifest_path = os.path.join(run_dir, "manifest.json")
+    if not os.path.isfile(manifest_path):
+        return {"runs": []}
+    try:
+        with open(manifest_path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {"runs": []}
+
+
 @router.get("/auto")
-async def list_auto_results():
-    return {"type": "auto", "entries": _list_entries(AUTO_DIR), "count": len(_list_entries(AUTO_DIR))}
+async def list_auto_results(request: Request):
+    manifest = _load_manifest(request)
+    return {
+        "fingerprint": getattr(request.state, "fingerprint", "unknown"),
+        "runs": manifest.get("runs", []),
+        "count": len(manifest.get("runs", [])),
+    }
 
 
-@router.get("/auto/image/{path:path}")
-async def get_auto_image(path: str, thumb: bool = Query(False)):
-    return _serve_image(AUTO_DIR, path, thumb=thumb)
+@router.get("/auto/run/{run_id}")
+async def get_auto_run(run_id: str, request: Request):
+    manifest = _load_manifest(request)
+    for run in manifest.get("runs", []):
+        if run["run_id"] == run_id:
+            return run
+    return JSONResponse({"error": "Run not found"}, status_code=404)
 
 
-@router.get("/auto/zip")
-async def download_auto_zip():
-    if not os.path.isdir(AUTO_DIR):
-        return JSONResponse({"error": "No results"}, status_code=404)
+@router.get("/auto/run/{run_id}/image/{path:path}")
+async def get_auto_run_image(run_id: str, path: str, request: Request, thumb: bool = Query(False)):
+    base_dir = os.path.join(_auto_run_dir(request), run_id)
+    return _serve_image(base_dir, path, thumb=thumb)
+
+
+@router.get("/auto/run/{run_id}/zip")
+async def download_auto_run_zip(run_id: str, request: Request):
+    run_dir = os.path.join(_auto_run_dir(request), run_id)
+    if not os.path.isdir(run_dir):
+        return JSONResponse({"error": "Run not found"}, status_code=404)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for root, dirs, files in os.walk(AUTO_DIR):
+        for root, dirs, files in os.walk(run_dir):
             for fname in sorted(files):
                 if fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-                    arcname = os.path.relpath(os.path.join(root, fname), AUTO_DIR)
+                    arcname = os.path.relpath(os.path.join(root, fname), run_dir)
                     zf.write(os.path.join(root, fname), arcname)
     buf.seek(0)
     return StreamingResponse(
         buf, media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=auto_classify.zip"},
+        headers={"Content-Disposition": f"attachment; filename=auto_{run_id}.zip"},
     )
 
 

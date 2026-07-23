@@ -476,12 +476,27 @@ def _auto_run(params: dict) -> dict:
     from utils.clustering import cluster_feature_db
     from utils.vector_db import require_feature_db
     from utils.common import float_range, int_range
+    from datetime import datetime
+    import json
     import os
 
+    fingerprint = params.get("fingerprint", "unknown")
+    fp_tag = f"fp_{fingerprint}" if fingerprint and fingerprint != "unknown" else ""
+
     input_folder = params.get("input_folder", "input/auto_uploads")
-    buffer_folder = params.get("buffer", "buffer/auto")
-    output_folder = params.get("output_folder", "output/auto/classify")
+    buffer_root = params.get("buffer", "buffer/auto")
+    output_root = params.get("output_folder", "output/auto/classify")
     db_name = params.get("db_name", "features.fvdb")
+
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if fp_tag:
+        buffer_folder = os.path.join(buffer_root, fp_tag, run_id)
+        output_folder = os.path.join(output_root, fp_tag, run_id)
+    else:
+        buffer_folder = os.path.join(buffer_root, run_id)
+        output_folder = os.path.join(output_root, run_id)
+
     conf = params.get("conf", 0.5)
     iou = params.get("iou", 0.45)
     imgsz = params.get("imgsz", 1280)
@@ -539,8 +554,30 @@ def _auto_run(params: dict) -> dict:
     from utils.common import reset_directory
     reset_directory(input_folder)
 
+    manifest_entry = {
+        "run_id": run_id,
+        "timestamp": datetime.now().timestamp(),
+        "entries": result_entries,
+        "total": sum(e["image_count"] for e in result_entries),
+    }
+
+    manifest_dir = os.path.join(output_root, fp_tag) if fp_tag else output_root
+    os.makedirs(manifest_dir, exist_ok=True)
+    manifest_path = os.path.join(manifest_dir, "manifest.json")
+    manifest = {"runs": []}
+    if os.path.isfile(manifest_path):
+        try:
+            with open(manifest_path, "r") as f:
+                manifest = json.load(f)
+        except Exception:
+            manifest = {"runs": []}
+    manifest["runs"].append(manifest_entry)
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+
     tq("完成！")
     return {
+        "run_id": run_id,
         "output_folder": str(output_folder),
         "entries": result_entries,
         "total": sum(e["image_count"] for e in result_entries),

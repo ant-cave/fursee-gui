@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Any, Optional
 
@@ -97,10 +97,12 @@ class AutoParams(BaseModel):
 
 
 @router.post("/auto")
-async def run_auto(params: AutoParams):
+async def run_auto(params: AutoParams, request: Request):
     if task_manager is None:
         raise HTTPException(503, "Task manager not initialized")
-    task_id = await task_manager.submit("auto", params.model_dump())
+    pd = params.model_dump()
+    pd["fingerprint"] = getattr(request.state, "fingerprint", "unknown")
+    task_id = await task_manager.submit("auto", pd)
     return {"task_id": task_id}
 
 

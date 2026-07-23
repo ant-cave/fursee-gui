@@ -1,6 +1,6 @@
 <template>
   <div class="auto-page">
-    <n-card :title="$t('auto.title')" class="mb-12">
+    <n-card :title="$t('auto.title')" class="mb-12" v-if="!running && !currentRunId">
       <div class="step-desc">{{ $t('auto.desc') }}</div>
 
       <div
@@ -10,7 +10,6 @@
         @drop.prevent="onDrop"
         :class="{ 'dropzone-active': dragOver }"
         @click="fileInput?.click()"
-        v-if="!running && !results.length"
       >
         <input ref="fileInput" type="file" multiple accept="image/*" style="display:none" @change="onFileChange" />
         <div class="upload-area" v-if="!uploading">
@@ -23,12 +22,12 @@
         </div>
       </div>
 
-      <div v-if="uploadCount && !running && !results.length" class="upload-summary">
+      <div v-if="uploadCount && !running" class="upload-summary">
         {{ $t('auto.uploaded', { n: uploadCount }) }}
       </div>
 
-      <div v-if="!running && !results.length" class="action-bar">
-        <n-button type="primary" size="large" @click="startAuto" :disabled="!uploadCount" block style="height:44px;font-size:16px">
+      <div v-if="uploadCount && !running" class="action-bar">
+        <n-button type="primary" size="large" @click="startAuto" block style="height:44px;font-size:16px">
           🚀 {{ $t('auto.start') }}
         </n-button>
         <n-collapse style="margin-top:8px">
@@ -52,35 +51,57 @@
       <div v-for="(log, i) in logs" :key="i" class="log-line">{{ log }}</div>
     </n-card>
 
-    <template v-if="results.length">
-      <n-card :title="$t('auto.results')" class="mb-12">
+    <template v-if="currentRun">
+      <n-card class="mb-12 current-run" size="small">
+        <template #header>
+          <div class="current-run-header">
+            <span>{{ $t('auto.current_run') }} · {{ currentRun.run_id }} · {{ currentRun.total }}{{ $t('auto.images') }}</span>
+            <n-button size="tiny" @click="resetCurrent">{{ $t('auto.new_upload') }}</n-button>
+          </div>
+        </template>
         <div class="result-toolbar">
-          <n-button type="primary" @click="downloadZip" :loading="zipping" size="large">📦 {{ $t('auto.download_zip') }}</n-button>
-          <n-button @click="resetAll">重新开始</n-button>
-          <span class="result-summary">{{ totalClassified }} 张图片 · {{ results.length }} 个分类</span>
+          <n-button type="primary" @click="downloadZip(currentRun.run_id)" :loading="zipping" size="small">📦 {{ $t('auto.download_zip') }}</n-button>
         </div>
-        <n-alert type="info" closable style="margin-bottom:14px;font-size:13px">
-          分类结果存储在服务器 <code style="background:#eee;padding:1px 4px;border-radius:3px">output/auto/classify/</code>，每个分类一个文件夹。点击上方按钮打包下载。
-        </n-alert>
-      </n-card>
-
-      <n-card v-for="entry in results" :key="entry.name" :title="`${entry.name} (${entry.image_count} 张)`" style="margin-bottom:12px">
-        <div class="result-grid">
-          <div v-for="img in entry.images" :key="img" class="result-img-wrap">
-            <img :src="`/api/results/auto/image/${entry.name}/${encodeURIComponent(img)}?thumb=1`" :alt="img" class="result-img" />
-            <div class="result-label">{{ img }}</div>
+        <div v-for="entry in currentRun.entries" :key="entry.name" style="margin-top:10px">
+          <div class="result-title">{{ entry.name }}</div>
+          <div class="result-grid">
+            <div v-for="img in entry.images" :key="img" class="result-img-wrap">
+              <img :src="`/api/results/auto/run/${currentRun.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1`" :alt="img" class="result-img" />
+              <div class="result-label">{{ img }}</div>
+            </div>
           </div>
         </div>
       </n-card>
     </template>
+
+    <n-card v-if="historyRuns.length" :title="$t('auto.history')" class="mb-12">
+      <n-collapse>
+        <n-collapse-item v-for="run in historyRuns" :key="run.run_id" :title="`${run.run_id} · ${run.total} ${$t('auto.images')}`" :name="run.run_id">
+          <div class="result-toolbar" style="margin-bottom:8px">
+            <n-button size="tiny" @click="downloadZip(run.run_id)" :loading="zipping">📦 {{ $t('auto.download_zip') }}</n-button>
+          </div>
+          <div v-for="entry in run.entries" :key="entry.name" style="margin-top:8px">
+            <div class="result-title">{{ entry.name }}</div>
+            <div class="result-grid">
+              <div v-for="img in entry.images" :key="img" class="result-img-wrap">
+                <img :src="`/api/results/auto/run/${run.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1`" :alt="img" class="result-img" />
+                <div class="result-label">{{ img }}</div>
+              </div>
+            </div>
+          </div>
+        </n-collapse-item>
+      </n-collapse>
+    </n-card>
+
+    <n-empty v-if="!running && !currentRunId && !historyRuns.length" :description="$t('auto.no_history')" style="margin-top:20px" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  NCard, NButton, NProgress, NCollapse, NCollapseItem, NAlert,
+  NCard, NButton, NProgress, NCollapse, NCollapseItem, NEmpty,
   NSlider, NInputNumber, useMessage,
 } from 'naive-ui'
 import { useApi } from '@/composables/useApi'
@@ -107,11 +128,13 @@ const running = ref(false)
 const currentStage = ref('')
 const logs = ref<string[]>([])
 const progress = ref({ current: 0, total: 0 })
-const results = ref<any[]>([])
 const zipping = ref(false)
 
+const currentRunId = ref('')
+const currentRun = ref<any>(null)
+const historyRuns = ref<any[]>([])
+
 const progressPct = computed(() => progress.value.total ? Math.round((progress.value.current / progress.value.total) * 100) : 0)
-const totalClassified = computed(() => results.value.reduce((s: number, e: any) => s + (e.image_count || 0), 0))
 
 async function doUpload(files: FileList | File[]) {
   const arr = Array.from(files).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name))
@@ -128,7 +151,8 @@ function onFileChange(e: Event) { const t = e.target as HTMLInputElement; if (t.
 
 async function startAuto() {
   if (!uploadCount.value) return
-  running.value = true; logs.value = []; progress.value = { current: 0, total: 0 }; results.value = []
+  running.value = true; logs.value = []; progress.value = { current: 0, total: 0 }
+  currentRunId.value = ''; currentRun.value = null
   currentStage.value = '📷 检测中'
   try {
     const res = await api.startPipeline('auto', {
@@ -155,35 +179,48 @@ function handleProgress(e: ProgressEvent) {
     logs.value.push('✅ 全流程完成！')
     msg.success('全流程完成！')
     running.value = false
-    loadResults()
+    refreshAfterRun()
   } else if (e.event === 'error') {
     logs.value.push(`❌ ${e.message}`)
     msg.error(e.message ?? '失败'); running.value = false
   }
 }
 
-async function loadResults() {
-  try {
-    const data = await (await fetch('/api/results/auto')).json()
-    results.value = data.entries || []
-  } catch { /* ignore */ }
+async function refreshAfterRun() {
+  await loadHistory()
+  if (historyRuns.value.length) {
+    currentRun.value = historyRuns.value[historyRuns.value.length - 1]
+    currentRunId.value = currentRun.value.run_id
+  }
 }
 
-async function downloadZip() {
+async function loadHistory() {
+  try {
+    const data = await api.getAutoHistory()
+    historyRuns.value = data.runs || []
+  } catch {}
+}
+
+async function downloadZip(runId: string) {
   zipping.value = true
   try {
     const a = document.createElement('a')
-    a.href = '/api/results/auto/zip'
-    a.download = 'auto_classify.zip'
+    a.href = `/api/results/auto/run/${runId}/zip`
+    a.download = `auto_${runId}.zip`
     a.click()
   } catch (e: any) { msg.error(e.message) }
   finally { zipping.value = false }
 }
 
-function resetAll() {
-  uploadCount.value = 0; logs.value = []; results.value = []
-  progress.value = { current: 0, total: 0 }; running.value = false
+function resetCurrent() {
+  currentRunId.value = ''
+  currentRun.value = null
+  uploadCount.value = 0
+  logs.value = []
+  progress.value = { current: 0, total: 0 }
 }
+
+onMounted(() => { loadHistory() })
 </script>
 
 <style scoped>
@@ -202,12 +239,14 @@ function resetAll() {
 .param-label { display:block; font-size:12px; color:#666; margin-bottom:4px; }
 .slider-val { margin-left:8px; color:#666; font-size:12px; }
 .log-line { font-size:12px; color:#666; padding:2px 0; font-family:monospace; }
-.result-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
-.result-summary { font-size:13px; color:#999; }
-.result-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px,1fr)); gap:8px; }
+.current-run-header { display:flex; justify-content:space-between; align-items:center; width:100%; }
+.result-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.result-title { font-weight:600; font-size:13px; margin-bottom:4px; color:#333; }
+.result-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(100px,1fr)); gap:6px; }
 .result-img-wrap { border:1px solid #eee; border-radius:6px; overflow:hidden; background:#fff; }
-.result-img { width:100%; height:110px; object-fit:cover; display:block; }
-.result-label { padding:3px 5px; font-size:10px; color:#666; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.result-img { width:100%; height:100px; object-fit:cover; display:block; }
+.result-label { padding:2px 4px; font-size:10px; color:#666; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.current-run { border:1px solid #333 !important; }
 @media (max-width:768px) {
   .param-row { flex-direction:column; gap:0; }
   .result-grid { grid-template-columns:repeat(3,1fr); }

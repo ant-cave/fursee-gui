@@ -5,6 +5,17 @@ const api = axios.create({
   timeout: 30000,
 })
 
+api.interceptors.request.use(
+  (config) => {
+    const fp = localStorage.getItem('fursee_fp')
+    if (fp) {
+      config.headers.set('X-Fingerprint', fp)
+    }
+    return config
+  },
+  (err) => Promise.reject(err)
+)
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {
@@ -65,6 +76,11 @@ export function useApi() {
     return `/api/results/${resultType}/image/${path}${thumb ? '?thumb=1' : ''}`
   }
 
+  async function getAutoHistory() {
+    const { data } = await api.get('/results/auto')
+    return data as { fingerprint: string; runs: any[]; count: number }
+  }
+
   return {
     getStats,
     listImages,
@@ -75,5 +91,6 @@ export function useApi() {
     listTasks,
     listResults,
     getResultImageUrl,
+    getAutoHistory,
   }
 }

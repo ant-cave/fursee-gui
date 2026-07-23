@@ -1,6 +1,16 @@
 import os
 from typing import Optional
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+
+class FingerprintMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        fp = request.headers.get("X-Fingerprint", "").strip()
+        request.state.fingerprint = fp if fp else "unknown"
+        return await call_next(request)
+
 
 def fp_prefix(fp: Optional[str]) -> str:
     if not fp or fp == "unknown":

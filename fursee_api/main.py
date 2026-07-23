@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fursee_api.api import images, pipeline, results
+from fursee_api.core.fingerprint import FingerprintMiddleware
 from fursee_api.core.task_manager import TaskManager
 from fursee_api.core.worker import process_pipeline, set_task_manager
 
@@ -39,6 +40,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(FingerprintMiddleware)
 
 app.include_router(images.router)
 app.include_router(pipeline.router)
