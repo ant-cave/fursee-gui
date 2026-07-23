@@ -33,6 +33,11 @@ def crop_furry_detections(
     ]
 
     for img_path in tqdm(image_paths, desc="Processing images", unit="image"):
+        img = cv2.imread(img_path)
+        if img is None:
+            print(f"Skipping unreadable image (cv2): {img_path}")
+            continue
+
         results = model.predict(
             source=img_path,
             device=device,
@@ -46,11 +51,6 @@ def crop_furry_detections(
         result = results[0]
         boxes = result.boxes
         if len(boxes) == 0:
-            continue
-
-        img = cv2.imread(img_path)
-        if img is None:
-            print(f"Skipping unreadable image: {img_path}")
             continue
         img_name = os.path.splitext(os.path.basename(img_path))[0]
 
@@ -87,7 +87,8 @@ def crop_furry_detections(
 def _find_largest_furry_box(model, image_path, device, half, conf, iou, imgsz):
     img = cv2.imread(image_path)
     if img is None:
-        raise ValueError(f"Unable to read image: {image_path}")
+        print(f"Warning: Unable to read image (likely corrupt), skipping: {image_path}")
+        return None, None, None
 
     h, w, _ = img.shape
     results = model.predict(
@@ -133,7 +134,10 @@ def _find_largest_furry_box(model, image_path, device, half, conf, iou, imgsz):
 
 
 def _save_largest_furry_crop(model, image_path, output_path, device, half, conf, iou, imgsz):
-    img, best_box, _ = _find_largest_furry_box(model, image_path, device, half, conf, iou, imgsz)
+    result = _find_largest_furry_box(model, image_path, device, half, conf, iou, imgsz)
+    if result[0] is None:
+        return None
+    img, best_box, _ = result
     x1, y1, x2, y2 = best_box
     face_crop = img[y1:y2, x1:x2]
     if face_crop.size == 0:

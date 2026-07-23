@@ -15,7 +15,8 @@ from fursee_api.api import images, pipeline, results
 from fursee_api.core.fingerprint import FingerprintMiddleware
 from fursee_api.core.task_manager import TaskManager
 from fursee_api.core.worker import process_pipeline, set_task_manager
-from fursee_api.core.ratelimit import get_quota
+from fursee_api.core.ratelimit import get_quota, check_admin_login, is_admin_token, record_admin_fail, reset_admin_attempts, get_active_fps
+from fursee_api.core.database import clean_old_runs
 
 
 task_manager = TaskManager()
@@ -23,6 +24,7 @@ task_manager = TaskManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    clean_old_runs()
     task_manager.set_processor(process_pipeline)
     set_task_manager(task_manager)
     await task_manager.start()
@@ -62,23 +64,43 @@ ADMIN_TOKEN = os.environ.get("FURSEE_ADMIN_TOKEN", "")
 
 @app.get("/api/admin/verify")
 async def admin_verify(request: Request):
+    ip = request.client.host if request.client else "unknown"
     token = request.headers.get("x-admin-token", "")
     if not ADMIN_TOKEN:
-        return {"admin": False, "reason": "no_token_configured"}
-    return {"admin": token == ADMIN_TOKEN}
+        return {"admin": False}
+    if token == ADMIN_TOKEN:
+        reset_admin_attempts(ip)
+        return {"admin": True}
+    allowed, wait = check_admin_login(ip)
+    if not allowed:
+        return {"admin": False, "reason": "rate_limited", "wait": int(wait)}
+    record_admin_fail(ip)
+    return {"admin": False}
+
+
+@app.get("/api/admin/queue")
+async def admin_queue(request: Request):
+    token = request.headers.get("x-admin-token", "")
+    if not ADMIN_TOKEN or token != ADMIN_TOKEN:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    return {"active_fps": get_active_fps()}
 
 
 @app.get("/api/quota")
 async def quota(request: Request):
     ip = request.client.host if request.client else "unknown"
-    return get_quota(ip)
+    fp = getattr(request.state, "fingerprint", "")
+    return get_quota(ip, fp)
 
 
 @app.get("/api/stats")
-async def stats():
+async def stats(request: Request):
     from utils.common import list_image_files
     from utils.vector_db import VectorDatabase
     import os
+
+    if not is_admin_token(request.headers.get("x-admin-token", "")):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     input_dir = os.path.join("input", "images")
     sim_dir = os.path.join("input", "sim_targets")

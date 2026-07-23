@@ -41,7 +41,7 @@ export function useWs() {
         if (data.event === 'complete' || data.event === 'error') {
           setTimeout(() => disconnect(), 500)
         }
-      } catch { /* ignore parse errors */ }
+      } catch { console.warn('useWs: failed to parse message', event.data) }
     }
 
     ws.onclose = () => {

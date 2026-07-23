@@ -1,15 +1,33 @@
+import hashlib
 import os
+import secrets
 from typing import Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 
 class FingerprintMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        fp = request.headers.get("X-Fingerprint", "").strip()
-        request.state.fingerprint = fp if fp else "unknown"
-        return await call_next(request)
+        if request.url.path.startswith("/api/"):
+            hdr_fp = request.headers.get("X-Fingerprint", "").strip()
+            cookie_fp = request.cookies.get("fursee_fp", "").strip()
+            if not hdr_fp or not cookie_fp or hdr_fp != cookie_fp:
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+            request.state.fingerprint = hdr_fp
+            response = await call_next(request)
+        else:
+            response = await call_next(request)
+        return response
+
+
+def generate_fp() -> str:
+    return secrets.token_hex(16)
+
+
+def hash_fp(fp: str) -> str:
+    return hashlib.sha256(fp.encode()).hexdigest()[:16]
 
 
 def fp_prefix(fp: Optional[str]) -> str:

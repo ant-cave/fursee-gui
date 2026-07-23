@@ -34,8 +34,6 @@ def _serve_image(base_dir: str, path: str, thumb: bool = False):
 
 def _fp_tag(request: Request) -> str:
     fp = getattr(request.state, "fingerprint", "unknown")
-    if not fp or fp == "unknown":
-        fp = request.query_params.get("fp", "")
     if fp and fp != "unknown":
         return f"fp_{fp}"
     return ""

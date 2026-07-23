@@ -32,6 +32,10 @@ def _validate_input_images(folder: str, log):
             removed += 1
     if removed:
         log(f"已删除 {removed} 个无效图片文件")
+    import warnings
+    warnings.filterwarnings("ignore", message=".*Corrupt JPEG.*")
+    import logging
+    logging.getLogger("PIL").setLevel(logging.ERROR)
 
 
 class _ProgressTqdm:
@@ -358,6 +362,7 @@ def _auto_run(params: dict) -> dict:
     now_ts = datetime.now().timestamp()
     total = sum(e["image_count"] for e in result_entries)
 
+    is_admin_run = params.get("is_admin", False)
     if is_append:
         update_run(fingerprint, run_id, result_entries, total, now_ts, buffer_path=buffer_folder)
     else:
@@ -369,6 +374,7 @@ def _auto_run(params: dict) -> dict:
             total=total,
             pipeline="auto",
             buffer_path=buffer_folder,
+            is_admin=is_admin_run,
         )
 
     tq("完成！")

@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider :theme-overrides="themeOverrides" :locale="naiveLocale">
+  <n-config-provider :theme-overrides="themeOverrides">
     <n-dialog-provider>
       <n-message-provider>
         <n-layout style="height: 100vh">
@@ -8,7 +8,7 @@
             style="height: 50px; display: flex; align-items: center; padding: 0 12px; background: #1a1a1a; gap: 8px"
           >
             <n-button quaternary style="color: #fff; padding: 0 6px" @click="menuOpen = !menuOpen">
-              <span style="font-size: 20px; line-height: 1">☰</span>
+              <Menu :size="20" />
             </n-button>
             <div style="font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 1px">{{ $t('app.title') }}</div>
             <div style="flex: 1" />
@@ -52,26 +52,33 @@
                 >
                   <router-view />
                 </n-layout-content>
+                <n-layout-footer bordered style="padding:6px 16px;font-size:11px;color:#999;text-align:center;background:#fafafa">
+                  Fursee © Jundi Wu · GUI Shell by ant-cave · AGPL-3.0 ·
+                  <a href="https://github.com/ant-cave/fursee" target="_blank" style="color:#1890ff;text-decoration:none">GitHub</a> ·
+                  <a href="mailto:antmmmmm@outlook.com" style="color:#1890ff;text-decoration:none">antmmmmm@outlook.com</a>
+                </n-layout-footer>
               </n-layout>
             </n-layout>
           </n-layout>
         </n-layout>
       </n-message-provider>
+      <Disclaimer />
     </n-dialog-provider>
   </n-config-provider>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted, h } from 'vue'
+import { Menu, Star } from '@lucide/vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   NConfigProvider, NDialogProvider, NMessageProvider, NLayout, NLayoutSider,
   NLayoutHeader, NLayoutContent, NMenu, NButton, NTag,
-  zhCN, dateZhCN, enUS, dateEnUS,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { themeOverrides } from '@/styles/theme'
 import { useWs } from '@/composables/useWs'
+import Disclaimer from '@/views/Disclaimer.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -104,13 +111,12 @@ function toggleLang() {
 const saved = localStorage.getItem('fursee_lang')
 if (saved === 'en' || saved === 'zh') locale.value = saved
 
-const naiveLocale = computed(() => locale.value === 'zh' ? zhCN : enUS)
-const naiveDateLocale = computed(() => locale.value === 'zh' ? dateZhCN : dateEnUS)
+
 
 const activeKey = computed(() => route.path)
 
 const menuOptions = computed(() => [
-  { label: t('nav.auto'), key: '/auto', icon: () => '☆' },
+  { label: t('nav.auto'), key: '/auto', icon: () => h(Star, { size: 16 }) },
 ])
 
 function goTo(key: string) {

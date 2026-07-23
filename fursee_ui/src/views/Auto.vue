@@ -4,33 +4,33 @@
     <!-- Quota bar (always visible) -->
     <n-card class="mb-12" size="small" :bordered="false" style="background:#fafafa">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;color:#666">
-        <span :style="{color: quota.upload_remaining < 1048576 ? '#e65' : '#666'}">📤 {{ formatBytes(quota.upload_remaining) }}/{{ formatBytes(quota.upload_max) }}</span>
-        <span :style="{color: quota.task_remaining < 2 ? '#e65' : '#666'}">⚡ {{ quota.task_remaining }}/{{ quota.task_max }} 次</span>
-        <span v-if="quota.next_reset_in > 0">⏳ {{ countdown }}</span>
-        <span v-else style="color:#999">额度充足</span>
+        <Upload :size="14" style="display:inline" /><span :style="{color: quota.upload_remaining < 1048576 ? '#e65' : '#666'}"> {{ formatBytes(quota.upload_remaining) }}/{{ formatBytes(quota.upload_max) }}</span>
+        <span v-if="quota.upload_reset_in > 0" style="color:#999"><Timer :size="14" style="display:inline" />{{ uploadCountdown }}</span>
+        <Zap :size="14" style="display:inline" /><span :style="{color: quota.task_remaining < 2 ? '#e65' : '#666'}"> {{ quota.task_remaining }}/{{ quota.task_max }}{{ t('auto.quota_tasks') }}</span>
+        <span v-if="quota.task_reset_in > 0" style="color:#999"><Timer :size="14" style="display:inline" />{{ taskCountdown }}</span>
         <div style="flex:1" />
         <template v-if="isAdmin">
-          <span style="color:#1890ff">管理员(无限)</span>
-          <n-button size="tiny" @click="logoutAdmin">退出</n-button>
+          <span style="color:#1890ff">{{ t('auto.admin_unlimited') }}</span>
+          <n-button size="tiny" @click="logoutAdmin">{{ t('auto.logout') }}</n-button>
         </template>
         <template v-else>
-          <n-input v-model:value="adminTokenInput" placeholder="管理员令牌" size="tiny" style="width:120px" />
-          <n-button size="tiny" @click="loginAdmin">登录</n-button>
+          <n-input v-model:value="adminTokenInput" :placeholder="t('auto.admin_token_placeholder')" size="tiny" style="width:120px" />
+          <n-button size="tiny" @click="loginAdmin">{{ t('auto.login') }}</n-button>
         </template>
-        <n-button size="tiny" @click="loadQuota">刷新</n-button>
+        <n-button size="tiny" @click="loadQuota">{{ t('auto.refresh') }}</n-button>
       </div>
     </n-card>
 
     <!-- Append mode indicator -->
     <n-card v-if="appendTargetId && !running" class="mb-12" size="small" :bordered="false" style="background:#fff7e6">
       <div style="display:flex;align-items:center;gap:8px;font-size:13px">
-        <span>📎 将新图片追加至: <strong>{{ appendTargetId }}</strong></span>
-        <n-button size="tiny" @click="appendTargetId = ''">取消</n-button>
+        <span>{{ t('auto.append_to', { id: appendTargetId }) }}</span>
+        <n-button size="tiny" @click="appendTargetId = ''">{{ t('auto.cancel') }}</n-button>
       </div>
     </n-card>
 
-    <n-card :title="appendTargetId ? '上传新图片' : $t('auto.title')" class="mb-12" v-if="!running && !currentRunId">
-      <div class="step-desc">{{ appendTargetId ? '选择要追加的图片，然后点击"追加识别"' : $t('auto.desc') }}</div>
+    <n-card :title="appendTargetId ? t('auto.new_title') : t('auto.title')" class="mb-12" v-if="!running && !currentRunId">
+      <div class="step-desc">{{ appendTargetId ? t('auto.append_desc') : t('auto.desc') }}</div>
 
       <div
         class="dropzone"
@@ -47,7 +47,7 @@
         </div>
         <div class="upload-area" v-else>
           <n-progress type="line" :percentage="uploadPct" indicator-placement="inside" style="max-width:300px;margin:0 auto" />
-          <p class="upload-hint" style="margin-top:4px">{{ uploadPct }}%</p>
+          <p class="upload-hint" style="margin-top:4px">{{ uploadStatus || uploadPct + '%' }}</p>
         </div>
       </div>
 
@@ -57,7 +57,7 @@
 
       <div v-if="uploadCount || appendTargetId" class="action-bar">
         <n-button type="primary" size="large" @click="startAuto" block style="height:44px;font-size:16px">
-          🚀 {{ appendTargetId ? '追加识别' : $t('auto.start') }}
+          {{ appendTargetId ? t('auto.append_run') : t('auto.start') }}
         </n-button>
         <n-collapse style="margin-top:8px">
           <n-collapse-item :title="$t('auto.params_title')" name="p">
@@ -75,7 +75,7 @@
       </div>
     </n-card>
 
-    <n-card v-if="running" :title="`${$t('auto.progress')} ${currentStage}`" class="mb-12">
+    <n-card v-if="running" :title="`${t('auto.progress')} ${currentStage}`" class="mb-12">
       <n-progress v-if="progress.total" type="line" :percentage="progressPct" indicator-placement="inside" style="margin-bottom:12px" />
       <div v-for="(log, i) in logs" :key="i" class="log-line">{{ log }}</div>
     </n-card>
@@ -84,12 +84,12 @@
       <n-card class="mb-12 current-run" size="small">
         <template #header>
           <div class="current-run-header">
-            <span>{{ $t('auto.current_run') }} · {{ currentRun.run_id }} · {{ currentRun.total }}{{ $t('auto.images') }}</span>
-            <n-button size="tiny" @click="resetCurrent">{{ $t('auto.new_upload') }}</n-button>
+            <span>{{ t('auto.current_run') }} · {{ currentRun.run_id }} · {{ currentRun.total }}{{ t('auto.images') }}</span>
+            <n-button size="tiny" @click="resetCurrent">{{ t('auto.new_upload') }}</n-button>
           </div>
         </template>
         <div class="result-toolbar">
-          <n-button type="primary" @click="downloadZip(currentRun.run_id)" :loading="zipping" size="small">📦 {{ $t('auto.download_zip') }}</n-button>
+          <n-button type="primary" @click="downloadZip(currentRun.run_id)" :loading="zipping" size="small"><Package :size="14" style="display:inline" /> {{ t('auto.download_zip') }}</n-button>
         </div>
         <div v-for="entry in currentRun.entries" :key="entry.name" style="margin-top:10px">
           <div class="result-title">{{ entry.name }}</div>
@@ -103,13 +103,14 @@
       </n-card>
     </template>
 
-    <n-card :title="$t('auto.history')" class="mb-12">
+    <n-card :title="t('auto.history')" class="mb-12">
       <template v-if="historyRuns.length">
         <n-collapse>
-          <n-collapse-item v-for="run in historyRuns" :key="run.run_id" :title="`${run.run_id} · ${run.total} ${$t('auto.images')}`" :name="run.run_id">
+          <n-collapse-item v-for="run in historyRuns" :key="run.run_id" :title="`${run.run_id} · ${run.total} ${t('auto.images')}`" :name="run.run_id">
             <div class="result-toolbar" style="margin-bottom:8px">
-              <n-button size="tiny" @click="downloadZip(run.run_id)" :loading="zipping">📦 {{ $t('auto.download_zip') }}</n-button>
-              <n-button v-if="!running" size="tiny" @click="setAppend(run.run_id)">+ 追加图片</n-button>
+              <n-button size="tiny" @click="downloadZip(run.run_id)" :loading="zipping"><Package :size="14" style="display:inline" /> {{ t('auto.download_zip') }}</n-button>
+              <n-button v-if="!running" size="tiny" @click="setAppend(run.run_id)">+ {{ t('auto.append_images') }}</n-button>
+              <n-button size="tiny" @click="deleteRun(run.run_id)" :loading="deleting === run.run_id"><Trash2 :size="14" style="display:inline" /></n-button>
             </div>
             <div v-for="entry in run.entries" :key="entry.name" style="margin-top:8px">
               <div class="result-title">{{ entry.name }}</div>
@@ -123,7 +124,27 @@
           </n-collapse-item>
         </n-collapse>
       </template>
-      <n-empty v-else :description="$t('auto.no_history')" style="margin:20px 0" />
+      <n-empty v-else :description="t('auto.no_history')" style="margin:20px 0" />
+    </n-card>
+
+    <n-card v-if="isAdmin && queueData.length" title="排队队列" class="mb-12" size="small">
+      <template #header-extra><n-button size="tiny" @click="loadQueue">刷新队列</n-button></template>
+      <div class="queue-table">
+        <div class="queue-row queue-header">
+          <span class="q-ip">IP</span>
+          <span class="q-fp">指纹</span>
+          <span class="q-up">上传</span>
+          <span class="q-task">次数</span>
+          <span class="q-block">风控</span>
+        </div>
+        <div v-for="(item, i) in queueData" :key="i" class="queue-row" :class="{'queue-blocked': item.ip_blocked}">
+          <span class="q-ip" :title="item.ip">{{ item.ip.slice(0, 15) }}</span>
+          <span class="q-fp" :title="item.fp">{{ item.fp.slice(0, 12) }}...</span>
+          <span class="q-up" :class="item.upload_remaining > 0 ? 'q-ok' : 'q-full'">{{ formatBytes(item.upload_remaining) }}/{{ formatBytes(item.upload_max) }}</span>
+          <span class="q-task" :class="item.task_remaining > 0 ? 'q-ok' : 'q-full'">{{ item.task_remaining }}/{{ item.task_max }}</span>
+          <span class="q-block">{{ item.ip_blocked ? '🔴 超限' : '🟢 正常' }}</span>
+        </div>
+      </div>
     </n-card>
   </div>
 </template>
@@ -133,6 +154,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const _fp = localStorage.getItem('fursee_fp') || ''
 const _fpSuffix = _fp ? `&fp=${encodeURIComponent(_fp)}` : ''
+import { Upload, Timer, Zap, Package, Trash2 } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import {
   NCard, NButton, NProgress, NCollapse, NCollapseItem, NEmpty,
@@ -150,6 +172,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)
 const uploading = ref(false)
 const uploadPct = ref(0)
+const uploadStatus = ref('')
 const uploadCount = ref(0)
 
 const conf = ref(0.5)
@@ -163,20 +186,35 @@ const currentStage = ref('')
 const logs = ref<string[]>([])
 const progress = ref({ current: 0, total: 0 })
 const zipping = ref(false)
+const deleting = ref('')
 
 const currentRunId = ref('')
-const currentRun = ref<any>(null)
-const historyRuns = ref<any[]>([])
+interface AutoEntry {
+  name: string
+  images: string[]
+}
+
+interface AutoRun {
+  run_id: string
+  total: number
+  entries: AutoEntry[]
+}
+
+const currentRun = ref<AutoRun | null>(null)
+const historyRuns = ref<AutoRun[]>([])
 
 const progressPct = computed(() => progress.value.total ? Math.round((progress.value.current / progress.value.total) * 100) : 0)
 
-const countdown = ref('')
+const uploadCountdown = ref('')
+const taskCountdown = ref('')
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 const isAdmin = ref(false)
 const adminTokenInput = ref('')
-const quota = ref({ upload_remaining: 0, upload_max: 0, task_remaining: 0, task_max: 0, next_reset_in: 0 })
+const quota = ref({ upload_remaining: 0, upload_max: 0, upload_reset_in: 0, task_remaining: 0, task_max: 0, task_reset_in: 0 })
 const appendTargetId = ref('')
+interface QueueItem { ip: string; fp: string; upload_remaining: number; upload_max: number; task_remaining: number; task_max: number; ip_blocked: boolean }
+const queueData = ref<QueueItem[]>([])
 
 function formatBytes(b: number) {
   if (b >= 1073741824) return (b / 1073741824).toFixed(1) + 'GB'
@@ -192,11 +230,11 @@ async function loginAdmin() {
   if (res.admin) {
     isAdmin.value = true
     adminTokenInput.value = ''
-    msg.success('管理员验证成功')
+    msg.success(t('auto.admin_verified'))
     loadQuota()
   } else {
     api.setAdminToken('')
-    msg.error('令牌无效')
+    msg.error(t('auto.admin_token_invalid'))
   }
 }
 
@@ -207,28 +245,31 @@ function logoutAdmin() {
 
 function formatCountdown(sec: number) {
   if (sec <= 0) return ''
-  const m = Math.floor(sec / 60)
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
   const s = sec % 60
-  if (m > 0) return `${m}分${s}秒后刷新`
-  return `${s}秒后刷新`
+  if (h > 0) return `${h}h${m}m`
+  if (m > 0) return `${m}m${s}s`
+  return `${s}s`
 }
 
 function startCountdown() {
   if (countdownTimer) clearInterval(countdownTimer)
   countdownTimer = setInterval(() => {
-    if (quota.value.next_reset_in > 0) {
-      quota.value.next_reset_in--
-      countdown.value = formatCountdown(quota.value.next_reset_in)
-    }
+    if (quota.value.upload_reset_in > 0) quota.value.upload_reset_in--
+    if (quota.value.task_reset_in > 0) quota.value.task_reset_in--
+    uploadCountdown.value = formatCountdown(quota.value.upload_reset_in)
+    taskCountdown.value = formatCountdown(quota.value.task_reset_in)
   }, 1000)
 }
 
 async function loadQuota() {
   try {
     quota.value = await api.getQuota()
-    countdown.value = formatCountdown(quota.value.next_reset_in)
+    uploadCountdown.value = formatCountdown(quota.value.upload_reset_in)
+    taskCountdown.value = formatCountdown(quota.value.task_reset_in)
     startCountdown()
-  } catch {}
+  } catch { console.warn('loadQuota failed') }
 }
 
 function setAppend(runId: string) {
@@ -242,12 +283,18 @@ function setAppend(runId: string) {
 async function doUpload(files: FileList | File[]) {
   const arr = Array.from(files).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name))
   if (!arr.length) return
-  uploading.value = true; uploadPct.value = 0
+  uploading.value = true; uploadPct.value = 0; uploadStatus.value = '上传中...'
+  let done = 0
+  const total = arr.length
   try {
-    await api.uploadImages('auto_uploads', arr, (p) => { uploadPct.value = p })
+    for (const file of arr) {
+      await api.uploadImages('auto_uploads', [file], (p) => { uploadPct.value = Math.round((done + p / 100) / total * 100) })
+      done++
+      uploadPct.value = Math.round(done / total * 100)
+    }
     uploadCount.value += arr.length
   } catch (e: any) { msg.error(e.message) }
-  finally { uploading.value = false; uploadPct.value = 0 }
+  finally { uploading.value = false; uploadPct.value = 0; uploadStatus.value = '' }
 }
 function onDrop(e: DragEvent) { dragOver.value = false; if (e.dataTransfer?.files) doUpload(e.dataTransfer.files) }
 function onFileChange(e: Event) { const t = e.target as HTMLInputElement; if (t.files) doUpload(t.files); t.value = '' }
@@ -256,9 +303,9 @@ async function startAuto() {
   if (!uploadCount.value && !appendTargetId.value) return
   running.value = true; logs.value = []; progress.value = { current: 0, total: 0 }
   currentRunId.value = ''; currentRun.value = null
-  currentStage.value = '📷 检测中'
+  currentStage.value = '🔍 ' + t('auto.step_detect')
   try {
-    const params: Record<string, any> = {
+    const params: Record<string, number | boolean | string> = {
       conf: conf.value, iou: iou.value,
       eps_start: epsStart.value, eps_stop: epsStop.value, eps_step: epsStep.value,
       use_augmentation: true, augmentation_count: 4,
@@ -272,23 +319,23 @@ async function startAuto() {
 function handleProgress(e: ProgressEvent) {
   if (e.event === 'progress') {
     progress.value = { current: e.current ?? 0, total: e.total ?? 0 }
-    if (e.stage?.includes('Step 1')) currentStage.value = '📷 检测中'
-    else if (e.stage?.includes('Step 2')) currentStage.value = '🧠 提取特征中'
-    else if (e.stage?.includes('Step 3')) currentStage.value = '🔗 聚类中'
+    if (e.stage?.includes('Step 1')) currentStage.value = '🔍 ' + t('auto.step_detect')
+    else if (e.stage?.includes('Step 2')) currentStage.value = '🧠 ' + t('auto.step_feature')
+    else if (e.stage?.includes('Step 3')) currentStage.value = '🔗 ' + t('auto.step_cluster')
     logs.value.push(`${e.stage}: ${e.current}/${e.total}`)
   } else if (e.event === 'log') {
     logs.value.push(e.message ?? '')
   } else if (e.event === 'complete') {
-    currentStage.value = '✅ 完成'
+    currentStage.value = '✅ ' + t('auto.step_done')
     progress.value = { current: 1, total: 1 }
-    logs.value.push('✅ 全流程完成！')
-    msg.success('全流程完成！')
+    logs.value.push('✅ ' + t('auto.complete'))
+    msg.success(t('auto.complete'))
     running.value = false
     appendTargetId.value = ''
     refreshAfterRun()
   } else if (e.event === 'error') {
-    logs.value.push(`❌ ${e.message}`)
-    msg.error(e.message ?? '失败'); running.value = false
+    logs.value.push('❌ ' + (e.message ?? ''))
+    msg.error(e.message ?? 'error'); running.value = false
   }
 }
 
@@ -305,7 +352,24 @@ async function loadHistory() {
   try {
     const data = await api.getAutoHistory()
     historyRuns.value = data.runs || []
-  } catch {}
+  } catch { console.warn('loadHistory failed') }
+}
+
+async function deleteRun(runId: string) {
+  deleting.value = runId
+  try {
+    await api.deleteRun(runId)
+    loadHistory()
+  } catch { msg.error('删除失败') }
+  finally { deleting.value = '' }
+}
+
+async function loadQueue() {
+  if (!isAdmin.value) return
+  try {
+    const { active_fps } = await api.getAdminQueue()
+    queueData.value = active_fps || []
+  } catch { queueData.value = [] }
 }
 
 async function downloadZip(runId: string) {
@@ -330,6 +394,7 @@ function resetCurrent() {
 onMounted(() => {
   loadHistory()
   loadQuota()
+  loadQueue()
   const saved = api.getAdminToken()
   if (saved) {
     api.verifyAdmin().then(r => {
@@ -368,6 +433,17 @@ onUnmounted(() => {
 .result-img { width:100%; height:100px; object-fit:cover; display:block; }
 .result-label { padding:2px 4px; font-size:10px; color:#666; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .current-run { border:1px solid #333 !important; }
+.queue-table { font-size:12px; }
+.queue-row { display:flex; gap:8px; padding:4px 0; border-bottom:1px solid #f0f0f0; align-items:center; }
+.queue-header { font-weight:600; color:#666; }
+.queue-blocked { background:#fff0f0; }
+.q-ip { width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.q-fp { width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.q-up { width:100px; }
+.q-task { width:60px; }
+.q-block { width:60px; }
+.q-ok { color:#52c41a; }
+.q-full { color:#e65; }
 @media (max-width:768px) {
   .param-row { flex-direction:column; gap:0; }
   .result-grid { grid-template-columns:repeat(3,1fr); }

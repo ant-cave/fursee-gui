@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 
 from utils.common import IMAGE_EXTENSIONS
 from utils.image_utils import serve_thumbnail
-from fursee_api.core.ratelimit import check_upload, is_admin_token, record_upload
+from fursee_api.core.ratelimit import check_upload, is_admin_token, is_over_queue_limit, record_upload
 
 router = APIRouter(prefix="/api/images", tags=["images"])
 
@@ -74,6 +74,10 @@ async def upload_images(category: str, request: Request, files: list[UploadFile]
         return JSONResponse({"error": f"Invalid category: {category}"}, status_code=400)
 
     ip = request.client.host if request.client else "unknown"
+    fp = getattr(request.state, "fingerprint", "")
+    if not is_admin_token(request.headers.get("x-admin-token", "")) and fp:
+        if is_over_queue_limit(ip, fp):
+            return JSONResponse({"error": "服务器繁忙, 请稍后再试"}, status_code=503)
     contents: list[tuple[str, bytes]] = []
     total_bytes = 0
     skipped_invalid: list[str] = []
@@ -100,9 +104,9 @@ async def upload_images(category: str, request: Request, files: list[UploadFile]
         return {"uploaded": [], "count": 0, "skipped": skipped_invalid}
 
     if not is_admin_token(request.headers.get("x-admin-token", "")):
-        ok, remaining, _ = check_upload(ip)
+        ok, remaining, _ = check_upload(ip, total_bytes)
         if not ok:
-            return JSONResponse({"error": "上传配额已用尽，请等待额度刷新", "remaining": 0}, status_code=429)
+            return JSONResponse({"error": "上传配额已用尽，请等待额度刷新", "remaining": remaining}, status_code=429)
         record_upload(ip, total_bytes)
 
     folder = CATEGORIES[category]
@@ -119,9 +123,11 @@ async def upload_images(category: str, request: Request, files: list[UploadFile]
 
 
 @router.delete("/{category}/{filename:path}")
-async def delete_image(category: str, filename: str):
+async def delete_image(category: str, filename: str, request: Request):
     if category not in CATEGORIES:
         return JSONResponse({"error": f"Invalid category: {category}"}, status_code=400)
+    if not is_admin_token(request.headers.get("x-admin-token", "")):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     folder_real = os.path.realpath(CATEGORIES[category])
     fpath = os.path.normpath(os.path.join(CATEGORIES[category], filename))
