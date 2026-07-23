@@ -12,7 +12,7 @@
       <div v-for="(log,i) in logs" :key="i" class="log-line">{{ log }}</div>
     </n-card>
     <n-card v-if="results.length" :title="$t('classify.results')">
-      <div v-for="entry in results" :key="entry.name" style="margin-bottom:14px"><div class="result-title">{{ entry.name }}</div><div v-if="entry.type==='folder'" class="result-grid"><div v-for="img in entry.images" :key="img" class="result-img-wrap"><img :src="api.getResultImageUrl('classify',`${entry.name}/${img}`)" :alt="img" class="result-img" /></div></div><div v-else class="result-size">{{ entry.size }} {{ $t('result.bytes') }}</div></div>
+      <div v-for="entry in results" :key="entry.name" style="margin-bottom:14px"><div class="result-title">{{ entry.name }}</div><div v-if="entry.type==='folder'" class="result-grid"><div v-for="img in entry.images" :key="img" class="result-img-wrap"><img :src="api.getResultImageUrl('classify',`${entry.name}/${img}`,true)" :alt="img" class="result-img" /></div></div><div v-else class="result-size">{{ entry.size }} {{ $t('result.bytes') }}</div></div>
     </n-card>
   </div>
 </template>

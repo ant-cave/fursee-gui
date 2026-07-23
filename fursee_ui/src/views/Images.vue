@@ -22,7 +22,7 @@
       <n-empty v-if="!images.length" :description="$t('images.no_images')" style="margin-top:20px" />
       <div v-else class="image-grid">
         <div v-for="img in images" :key="img.name" class="img-card">
-          <img :src="`/api/images/${activeTab}/image/${encodeURIComponent(img.name)}`" :alt="img.name" class="img-thumb" @error="($event.target as HTMLImageElement).style.display='none'" />
+          <img :src="`/api/images/${activeTab}/image/${encodeURIComponent(img.name)}?thumb=1`" :alt="img.name" class="img-thumb" @error="($event.target as HTMLImageElement).style.display='none'" />
           <div class="img-name">{{ img.name }}</div>
           <n-button size="tiny" quaternary circle class="img-del" @click="deleteImg(img.name)">✕</n-button>
         </div>

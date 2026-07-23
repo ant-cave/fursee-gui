@@ -7,14 +7,14 @@
           <div class="upload-area" v-if="!uploading"><p class="upload-title">{{ $t('similar.drag_hint') }}</p><p class="upload-hint">{{ $t('similar.hint_detail') }}</p></div>
           <div class="upload-area" v-else><n-progress type="line" :percentage="uploadPct" indicator-placement="inside" style="max-width:200px;margin:0 auto" /></div>
         </div>
-        <img v-if="refImage" :src="refImageUrl" class="ref-preview" />
+        <img v-if="refImage" :src="refImageUrl + '?thumb=1'" class="ref-preview" />
       </n-card>
       <n-card :title="$t('similar.settings')" class="settings-card">
         <n-form label-placement="top"><n-form-item :label="$t('similar.topk')"><n-input-number v-model:value="k" :min="1" :max="100" style="width:100%" /></n-form-item><n-form-item><n-button type="primary" @click="startSearch" :loading="running" :disabled="running||!refImage" block>{{ $t('similar.search') }}</n-button></n-form-item></n-form>
       </n-card>
     </div>
     <n-card v-if="running||logs.length" :title="$t('similar.progress')" class="mb-12"><div v-for="(log,i) in logs" :key="i" class="log-line">{{ log }}</div></n-card>
-    <n-card v-if="results.length" :title="$t('similar.results')"><div v-for="entry in results" :key="entry.name" style="margin-bottom:14px"><div class="result-title">{{ entry.name }}</div><div v-if="entry.type==='folder'" class="result-grid"><div v-for="img in entry.images" :key="img" class="result-img-wrap"><img :src="api.getResultImageUrl('similar',`${entry.name}/${img}`)" :alt="img" class="result-img" /><div class="result-label">{{ img }}</div></div></div></div></n-card>
+    <n-card v-if="results.length" :title="$t('similar.results')"><div v-for="entry in results" :key="entry.name" style="margin-bottom:14px"><div class="result-title">{{ entry.name }}</div><div v-if="entry.type==='folder'" class="result-grid"><div v-for="img in entry.images" :key="img" class="result-img-wrap"><img :src="api.getResultImageUrl('similar',`${entry.name}/${img}`,true)" :alt="img" class="result-img" /><div class="result-label">{{ img }}</div></div></div></div></n-card>
   </div>
 </template>
 <script setup lang="ts">

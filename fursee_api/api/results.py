@@ -2,8 +2,8 @@ import io
 import os
 import zipfile
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 router = APIRouter(prefix="/api/results", tags=["results"])
 
@@ -16,7 +16,27 @@ RESULT_DIRS = {
 AUTO_DIR = os.path.join("output", "auto", "classify")
 
 
-def _serve_image(base_dir: str, path: str):
+THUMB_MAX_SIZE = 200
+
+
+def _thumb(fpath: str):
+    try:
+        from PIL import Image
+        img = Image.open(fpath)
+        img = img.convert("RGB")
+        w, h = img.size
+        if w > THUMB_MAX_SIZE:
+            ratio = THUMB_MAX_SIZE / w
+            img = img.resize((THUMB_MAX_SIZE, int(h * ratio)), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=75)
+        buf.seek(0)
+        return Response(content=buf.read(), media_type="image/jpeg")
+    except Exception:
+        return None
+
+
+def _serve_image(base_dir: str, path: str, thumb: bool = False):
     full_path = os.path.normpath(os.path.join(base_dir, path))
     base_real = os.path.realpath(base_dir)
     full_real = os.path.realpath(full_path)
@@ -24,6 +44,10 @@ def _serve_image(base_dir: str, path: str):
         return JSONResponse({"error": "Invalid path"}, status_code=400)
     if not os.path.isfile(full_path):
         return JSONResponse({"error": "File not found"}, status_code=404)
+    if thumb:
+        resp = _thumb(full_path)
+        if resp:
+            return resp
     ext = os.path.splitext(full_path)[1].lower()
     media_type = {
         ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -55,8 +79,8 @@ async def list_auto_results():
 
 
 @router.get("/auto/image/{path:path}")
-async def get_auto_image(path: str):
-    return _serve_image(AUTO_DIR, path)
+async def get_auto_image(path: str, thumb: bool = Query(False)):
+    return _serve_image(AUTO_DIR, path, thumb=thumb)
 
 
 @router.get("/auto/zip")
@@ -109,7 +133,7 @@ async def download_results_zip(result_type: str):
 
 
 @router.get("/{result_type}/image/{path:path}")
-async def get_result_image(result_type: str, path: str):
+async def get_result_image(result_type: str, path: str, thumb: bool = Query(False)):
     if result_type not in RESULT_DIRS:
         return JSONResponse({"error": "Invalid result type"}, status_code=400)
-    return _serve_image(RESULT_DIRS[result_type], path)
+    return _serve_image(RESULT_DIRS[result_type], path, thumb=thumb)

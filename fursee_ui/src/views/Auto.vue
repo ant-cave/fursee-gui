@@ -67,7 +67,7 @@
       <n-card v-for="entry in results" :key="entry.name" :title="`${entry.name} (${entry.image_count} 张)`" style="margin-bottom:12px">
         <div class="result-grid">
           <div v-for="img in entry.images" :key="img" class="result-img-wrap">
-            <img :src="`/api/results/auto/image/${entry.name}/${encodeURIComponent(img)}`" :alt="img" class="result-img" />
+            <img :src="`/api/results/auto/image/${entry.name}/${encodeURIComponent(img)}?thumb=1`" :alt="img" class="result-img" />
             <div class="result-label">{{ img }}</div>
           </div>
         </div>

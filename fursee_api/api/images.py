@@ -1,7 +1,8 @@
+import io
 import os
 
-from fastapi import APIRouter, File, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import APIRouter, File, Query, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from utils.common import IMAGE_EXTENSIONS
 
@@ -15,8 +16,33 @@ CATEGORIES = {
 }
 
 
+THUMB_MAX_SIZE = 200
+
+
+def _serve_thumb(fpath: str):
+    try:
+        from PIL import Image
+        img = Image.open(fpath)
+        img = img.convert("RGB")
+        w, h = img.size
+        if w > THUMB_MAX_SIZE:
+            ratio = THUMB_MAX_SIZE / w
+            img = img.resize((THUMB_MAX_SIZE, int(h * ratio)), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=75)
+        buf.seek(0)
+        return Response(content=buf.read(), media_type="image/jpeg")
+    except Exception:
+        ext = os.path.splitext(fpath)[1].lower()
+        media_type = {
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".png": "image/png", ".webp": "image/webp",
+        }.get(ext, "application/octet-stream")
+        return FileResponse(fpath, media_type=media_type)
+
+
 @router.get("/{category}/image/{filename:path}")
-async def get_image(category: str, filename: str):
+async def get_image(category: str, filename: str, thumb: bool = Query(False)):
     if category not in CATEGORIES:
         return JSONResponse({"error": "Invalid category"}, status_code=400)
 
@@ -29,6 +55,9 @@ async def get_image(category: str, filename: str):
 
     if not os.path.isfile(fpath):
         return JSONResponse({"error": "File not found"}, status_code=404)
+
+    if thumb:
+        return _serve_thumb(fpath)
 
     ext = os.path.splitext(fpath)[1].lower()
     media_type = {

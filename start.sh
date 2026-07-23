@@ -12,18 +12,18 @@ fi
 
 python3 -c "import websockets" 2>/dev/null || pip install websockets --quiet
 
-WITH_FRONTEND=false
+API_ONLY=false
 PORT=8898
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --with-frontend) WITH_FRONTEND=true; shift ;;
+    --api-only) API_ONLY=true; shift ;;
     --port) PORT="$2"; shift 2 ;;
     *) PORT="$1"; shift ;;
   esac
 done
 
-if [ "$WITH_FRONTEND" = true ]; then
+if [ "$API_ONLY" = false ]; then
     echo "[..] 正在构建前端..."
     cd fursee_ui
     npm install --silent

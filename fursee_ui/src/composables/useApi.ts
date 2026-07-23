@@ -61,8 +61,8 @@ export function useApi() {
     return data
   }
 
-  function getResultImageUrl(resultType: string, path: string) {
-    return `/api/results/${resultType}/image/${path}`
+  function getResultImageUrl(resultType: string, path: string, thumb = false) {
+    return `/api/results/${resultType}/image/${path}${thumb ? '?thumb=1' : ''}`
   }
 
   return {

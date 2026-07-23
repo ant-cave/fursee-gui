@@ -14,7 +14,7 @@
       </n-card>
     </div>
     <n-card v-if="running||logs.length" :title="$t('identify.progress')" class="mb-12"><div v-for="(log,i) in logs" :key="i" class="log-line">{{ log }}</div></n-card>
-    <n-card v-if="results.length" :title="$t('identify.results')"><div v-for="entry in results" :key="entry.name" style="margin-bottom:16px"><div class="result-title">{{ entry.name }} <n-tag size="small" style="margin-left:6px">{{ entry.image_count }} {{ $t('identify.images') }}</n-tag></div><div v-if="entry.type==='folder'" class="result-grid"><div v-for="img in entry.images" :key="img" class="result-img-wrap"><img :src="api.getResultImageUrl('identify',`${entry.name}/${img}`)" :alt="img" class="result-img" /><div class="result-label">{{ img }}</div></div></div></div><n-empty v-if="!results.length" :description="$t('identify.no_match')" /></n-card>
+    <n-card v-if="results.length" :title="$t('identify.results')"><div v-for="entry in results" :key="entry.name" style="margin-bottom:16px"><div class="result-title">{{ entry.name }} <n-tag size="small" style="margin-left:6px">{{ entry.image_count }} {{ $t('identify.images') }}</n-tag></div><div v-if="entry.type==='folder'" class="result-grid"><div v-for="img in entry.images" :key="img" class="result-img-wrap"><img :src="api.getResultImageUrl('identify',`${entry.name}/${img}`,true)" :alt="img" class="result-img" /><div class="result-label">{{ img }}</div></div></div></div><n-empty v-if="!results.length" :description="$t('identify.no_match')" /></n-card>
   </div>
 </template>
 <script setup lang="ts">
@@ -32,7 +32,7 @@ const hasRef=computed(()=>refImages.value.length>0)
 async function doUpload(files:FileList|File[]){const arr=Array.from(files).filter(f=>/\.(jpg|jpeg|png|webp)$/i.test(f.name));if(!arr.length)return;uploading.value=true;uploadPct.value=0;try{await api.uploadImages('id_targets',arr,(p)=>uploadPct.value=p);loadRefImages()}catch(e:any){msg.error(e.message)}finally{uploading.value=false}}
 function onDrop(e:DragEvent){dragOver.value=false;if(e.dataTransfer?.files)doUpload(e.dataTransfer.files)}
 function onFileChange(e:Event){const t=e.target as HTMLInputElement;if(t.files)doUpload(t.files);t.value=''}
-async function loadRefImages(){try{const data=await api.listImages('id_targets');refImages.value=(data.images||[]).map((i:any)=>`/api/images/id_targets/image/${encodeURIComponent(i.name)}`)}catch{}}
+async function loadRefImages(){try{const data=await api.listImages('id_targets');refImages.value=(data.images||[]).map((i:any)=>`/api/images/id_targets/image/${encodeURIComponent(i.name)}?thumb=1`)}catch{}}
 async function startIdentify(){running.value=true;logs.value=[];results.value=[];try{const res=await api.startPipeline('identify',{eps_start:epsStart.value,eps_stop:epsStop.value});connect(res.task_id,handleProgress)}catch(e:any){msg.error(e.message);running.value=false}}
 function handleProgress(e:ProgressEvent){if(e.event==='progress'){logs.value.push(`${e.stage}: ${e.current}/${e.total}`)}else if(e.event==='log'){logs.value.push(e.message??'')}else if(e.event==='complete'){logs.value.push(`✅ ${t('identify.complete')}`);msg.success(t('identify.complete'));running.value=false;loadResults()}else if(e.event==='error'){logs.value.push(`❌ ${e.message}`);msg.error(e.message??t('identify.failed'));running.value=false}}
 async function loadResults(){try{const data=await api.listResults('identify');results.value=data.entries||[]}catch{}}
