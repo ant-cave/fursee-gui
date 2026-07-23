@@ -44,20 +44,20 @@ class TestAutoEndpoint:
         data = resp.json()
         assert "task_id" in data
 
-    def test_auto_with_fingerprint_header(self, client):
-        resp = client.post(
-            "/api/pipeline/auto",
-            json={"existing_run_id": "run_001"},
-            headers={"X-Fingerprint": "abc123"},
-        )
-        assert resp.status_code == 200
-
     def test_auto_invalid_body_still_ok_with_defaults(self, client):
         resp = client.post("/api/pipeline/auto", json={"conf": 0.8, "eps_start": 0.5})
         assert resp.status_code == 200
 
     def test_auto_endpoint_rejects_bad_type(self, client):
         resp = client.post("/api/pipeline/auto", json={"conf": "not_a_number"})
+        assert resp.status_code == 422
+
+    def test_auto_rejects_out_of_range_eps(self, client):
+        resp = client.post("/api/pipeline/auto", json={"eps_start": 20.0})
+        assert resp.status_code == 422
+
+    def test_auto_rejects_out_of_range_augmentation_count(self, client):
+        resp = client.post("/api/pipeline/auto", json={"augmentation_count": 999})
         assert resp.status_code == 422
 
 

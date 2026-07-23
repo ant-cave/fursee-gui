@@ -75,13 +75,3 @@ class TestHealth:
         resp = client.get("/api/health")
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}
-
-
-class TestQuota:
-    def test_quota(self, client):
-        resp = client.get("/api/quota")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "ip" in data
-        assert "upload_remaining" in data
-        assert "task_remaining" in data

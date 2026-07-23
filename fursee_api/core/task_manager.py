@@ -26,9 +26,12 @@ class Task:
 ProcessorFunc = Callable[[Task], Coroutine[Any, Any, dict[str, Any]]]
 
 
+MAX_QUEUE_SIZE = 20
+
+
 class TaskManager:
     def __init__(self):
-        self._queue: asyncio.Queue[Task] = asyncio.Queue()
+        self._queue: asyncio.Queue[Task] = asyncio.Queue(maxsize=MAX_QUEUE_SIZE)
         self._tasks: dict[str, Task] = {}
         self._worker_task: Optional[asyncio.Task] = None
         self._processor: Optional[ProcessorFunc] = None
@@ -49,7 +52,11 @@ class TaskManager:
         task_id = uuid.uuid4().hex[:12]
         task = Task(id=task_id, type=task_type, params=params)
         self._tasks[task_id] = task
-        await self._queue.put(task)
+        try:
+            await asyncio.wait_for(self._queue.put(task), timeout=5.0)
+        except asyncio.TimeoutError:
+            self._tasks.pop(task_id, None)
+            raise RuntimeError("任务队列已满，请稍后再试")
         return task_id
 
     def get_task(self, task_id: str) -> Optional[Task]:

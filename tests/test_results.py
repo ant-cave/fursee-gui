@@ -23,9 +23,9 @@ def _patch_db_path(monkeypatch):
     os.unlink(tmp)
 
 
-def _make_fake_output(root: str, fp_tag: str, run_id: str, groups: list[str]):
+def _make_fake_output(root: str, run_id: str, groups: list[str]):
     for g in groups:
-        d = os.path.join(root, fp_tag, run_id, g) if fp_tag else os.path.join(root, run_id, g)
+        d = os.path.join(root, run_id, g)
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "pic.jpg"), "w") as f:
             f.write("fake")
@@ -39,18 +39,9 @@ class TestListAutoResults:
         assert data["count"] == 0
         assert data["runs"] == []
 
-    def test_list_with_fingerprint(self, client):
-        resp = client.get("/api/results/auto", headers={"X-Fingerprint": "abc"})
-        assert resp.status_code == 200
-        assert "runs" in resp.json()
-
-    def test_list_with_fingerprint_in_query(self, client):
-        resp = client.get("/api/results/auto?fp=abc")
-        assert resp.status_code == 200
-
     def test_list_after_adding_run(self, client):
-        database.add_run("fp_test", "run_001", 1000.0, [], 0)
-        resp = client.get("/api/results/auto", headers={"X-Fingerprint": "fp_test"})
+        database.add_run("run_001", 1000.0, [], 0)
+        resp = client.get("/api/results/auto")
         assert resp.status_code == 200
         data = resp.json()
         assert data["count"] == 1
@@ -59,18 +50,13 @@ class TestListAutoResults:
 
 class TestGetAutoRun:
     def test_get_run(self, client):
-        database.add_run("fp_test", "run_001", 1000.0, [{"name": "组_1", "image_count": 2, "images": ["a.jpg"]}], 2)
-        resp = client.get("/api/results/auto/run/run_001", headers={"X-Fingerprint": "fp_test"})
+        database.add_run("run_001", 1000.0, [{"name": "组_1", "image_count": 2, "images": ["a.jpg"]}], 2)
+        resp = client.get("/api/results/auto/run/run_001")
         assert resp.status_code == 200
         assert resp.json()["run_id"] == "run_001"
 
     def test_get_nonexistent_run(self, client):
-        resp = client.get("/api/results/auto/run/no_such_run", headers={"X-Fingerprint": "fp_test"})
-        assert resp.status_code == 404
-
-    def test_get_run_isolated_by_fingerprint(self, client):
-        database.add_run("fp_a", "run_001", 0.0, [], 0)
-        resp = client.get("/api/results/auto/run/run_001", headers={"X-Fingerprint": "fp_b"})
+        resp = client.get("/api/results/auto/run/no_such_run")
         assert resp.status_code == 404
 
 
@@ -85,50 +71,45 @@ class TestDeleteAutoRun:
         return os.path.join(os.getcwd(), "buffer", "auto", name)
 
     def test_delete_nonexistent(self, client):
-        resp = client.delete("/api/results/auto/run/no_such_run", headers={"X-Fingerprint": "fp_test"})
+        resp = client.delete("/api/results/auto/run/no_such_run")
         assert resp.status_code == 404
 
     def test_delete_run_removes_output_dir(self, client):
-        database.add_run("fp_test", "r1", 1000.0, [], 0, buffer_path="")
-        _make_fake_output(str(self.auto_root), "fp_fp_test", "r1", ["组_1"])
-        resp = client.delete("/api/results/auto/run/r1", headers={"X-Fingerprint": "fp_test"})
+        database.add_run("r1", 1000.0, [], 0, buffer_path="")
+        _make_fake_output(str(self.auto_root), "r1", ["组_1"])
+        resp = client.delete("/api/results/auto/run/r1")
         assert resp.status_code == 200
-        assert not (self.auto_root / "fp_fp_test" / "r1").exists()
+        assert not (self.auto_root / "r1").exists()
 
     def test_delete_run_rejects_invalid_buffer_path(self, client):
-        database.add_run("fp_test", "run_001", 1000.0, [], 0, buffer_path="/etc/passwd")
-        resp = client.delete("/api/results/auto/run/run_001", headers={"X-Fingerprint": "fp_test"})
+        database.add_run("run_001", 1000.0, [], 0, buffer_path="/etc/passwd")
+        resp = client.delete("/api/results/auto/run/run_001")
         assert resp.status_code == 400
 
     def test_delete_run_removes_buffer_within_buffer_root(self, client):
         buf = self._buf_path("run_buf")
         os.makedirs(buf, exist_ok=True)
-        database.add_run("fp_test", "r2", 1000.0, [], 0, buffer_path=buf)
-        _make_fake_output(str(self.auto_root), "fp_fp_test", "r2", ["组_1"])
-        resp = client.delete("/api/results/auto/run/r2", headers={"X-Fingerprint": "fp_test"})
+        database.add_run("r2", 1000.0, [], 0, buffer_path=buf)
+        _make_fake_output(str(self.auto_root), "r2", ["组_1"])
+        resp = client.delete("/api/results/auto/run/r2")
         assert resp.status_code == 200
         assert not os.path.isdir(buf)
 
     def test_delete_run_removes_from_db(self, client):
-        database.add_run("fp_test", "r1", 1000.0, [], 0)
-        client.delete("/api/results/auto/run/r1", headers={"X-Fingerprint": "fp_test"})
-        assert database.get_run("fp_test", "r1") is None
-
-    def test_delete_run_isolated_by_fingerprint(self, client):
-        database.add_run("fp_a", "r1", 0.0, [], 0)
-        resp = client.delete("/api/results/auto/run/r1", headers={"X-Fingerprint": "fp_b"})
-        assert resp.status_code == 404
+        database.add_run("r1", 1000.0, [], 0)
+        client.delete("/api/results/auto/run/r1")
+        assert database.get_run("r1") is None
 
     def test_delete_empty_buffer_path(self, client):
-        database.add_run("fp_test", "r1", 1000.0, [], 0, buffer_path="")
-        resp = client.delete("/api/results/auto/run/r1", headers={"X-Fingerprint": "fp_test"})
+        database.add_run("r1", 1000.0, [], 0, buffer_path="")
+        resp = client.delete("/api/results/auto/run/r1")
         assert resp.status_code == 200
 
     def test_delete_nonexistent_buffer_path_skipped(self, client):
         buf = self._buf_path("noexist_buf")
-        database.add_run("fp_test", "r3", 1000.0, [], 0, buffer_path=buf)
-        _make_fake_output(str(self.auto_root), "fp_fp_test", "r3", ["组_1"])
-        resp = client.delete("/api/results/auto/run/r3", headers={"X-Fingerprint": "fp_test"})
+        database.add_run("r3", 1000.0, [], 0, buffer_path=buf)
+        _make_fake_output(str(self.auto_root), "r3", ["组_1"])
+        resp = client.delete("/api/results/auto/run/r3")
         assert resp.status_code == 200
 
 
@@ -137,9 +118,9 @@ class TestAutoRunImage:
         auto_root = tmp_path / "auto_results"
         auto_root.mkdir()
         monkeypatch.setattr("fursee_api.api.results.AUTO_ROOT", str(auto_root))
-        database.add_run("fp_test", "r1", 0.0, [{"name": "组_1", "image_count": 1, "images": ["pic.jpg"]}], 1)
-        _make_fake_output(str(auto_root), "fp_fp_test", "r1", ["组_1"])
-        resp = client.get("/api/results/auto/run/r1/image/组_1/pic.jpg?fp=fp_test")
+        database.add_run("r1", 0.0, [{"name": "组_1", "image_count": 1, "images": ["pic.jpg"]}], 1)
+        _make_fake_output(str(auto_root), "r1", ["组_1"])
+        resp = client.get("/api/results/auto/run/r1/image/组_1/pic.jpg")
         assert resp.status_code == 200
 
     def test_get_image_nonexistent(self, client):
@@ -156,8 +137,8 @@ class TestDownloadZip:
         auto_root = tmp_path / "auto_results"
         auto_root.mkdir()
         monkeypatch.setattr("fursee_api.api.results.AUTO_ROOT", str(auto_root))
-        database.add_run("fp_test", "r1", 0.0, [], 1)
-        _make_fake_output(str(auto_root), "fp_fp_test", "r1", ["组_1"])
-        resp = client.get("/api/results/auto/run/r1/zip?fp=fp_test")
+        database.add_run("r1", 0.0, [], 1)
+        _make_fake_output(str(auto_root), "r1", ["组_1"])
+        resp = client.get("/api/results/auto/run/r1/zip")
         assert resp.status_code == 200
         assert "application/zip" in resp.headers.get("content-type", "")

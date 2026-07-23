@@ -229,9 +229,6 @@ def _auto_run(params: dict) -> dict:
     import shutil
     import os
 
-    fingerprint = params.get("fingerprint", "unknown")
-    fp_tag = f"fp_{fingerprint}" if fingerprint and fingerprint != "unknown" else ""
-
     input_uploads = params.get("input_folder", "input/auto_uploads")
     buffer_root = params.get("buffer", "buffer/auto")
     output_root = params.get("output_folder", "output/auto/classify")
@@ -240,14 +237,8 @@ def _auto_run(params: dict) -> dict:
     existing_run_id = params.get("existing_run_id", "")
 
     run_id = existing_run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    fp_dir = fp_tag if fp_tag else ""
-    if fp_dir:
-        output_folder = os.path.join(output_root, fp_dir, run_id)
-        buffer_folder = os.path.join(buffer_root, fp_dir, run_id)
-    else:
-        output_folder = os.path.join(output_root, run_id)
-        buffer_folder = os.path.join(buffer_root, run_id)
+    output_folder = os.path.join(output_root, run_id)
+    buffer_folder = os.path.join(buffer_root, run_id)
 
     conf = params.get("conf", 0.5)
     iou = params.get("iou", 0.45)
@@ -262,7 +253,7 @@ def _auto_run(params: dict) -> dict:
 
     is_append = bool(existing_run_id and os.path.isdir(output_folder))
 
-    merge_folder = os.path.join(buffer_root, fp_dir, f"merge_{run_id}")
+    merge_folder = os.path.join(buffer_root, f"merge_{run_id}")
 
     if is_append:
         tq("附加模式：合并旧图片与新图片...")
@@ -291,7 +282,7 @@ def _auto_run(params: dict) -> dict:
     if is_append and os.path.isfile(db_path):
         tq("附加模式：复用旧特征库，仅处理新图...")
         old_db = VectorDatabase.load_auto(buffer_folder, preferred_name=db_name)
-        temp_buffer = os.path.join(buffer_root, fp_dir, f"temp_{run_id}")
+        temp_buffer = os.path.join(buffer_root, f"temp_{run_id}")
         crop_furry_detections(
             input_folder=input_source,
             output_folder=temp_buffer,
@@ -362,19 +353,16 @@ def _auto_run(params: dict) -> dict:
     now_ts = datetime.now().timestamp()
     total = sum(e["image_count"] for e in result_entries)
 
-    is_admin_run = params.get("is_admin", False)
     if is_append:
-        update_run(fingerprint, run_id, result_entries, total, now_ts, buffer_path=buffer_folder)
+        update_run(run_id, result_entries, total, now_ts, buffer_path=buffer_folder)
     else:
         add_run(
-            fingerprint=fingerprint if fingerprint != "unknown" else "unknown",
             run_id=run_id,
             timestamp=now_ts,
             entries=result_entries,
             total=total,
             pipeline="auto",
             buffer_path=buffer_folder,
-            is_admin=is_admin_run,
         )
 
     tq("完成！")

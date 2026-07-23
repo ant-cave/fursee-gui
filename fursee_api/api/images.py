@@ -1,11 +1,11 @@
 import os
+import re
 
 from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from utils.common import IMAGE_EXTENSIONS
 from utils.image_utils import serve_thumbnail
-from fursee_api.core.ratelimit import check_upload, is_admin_token, is_over_queue_limit, record_upload
 
 router = APIRouter(prefix="/api/images", tags=["images"])
 
@@ -15,6 +15,19 @@ CATEGORIES = {
     "id_targets": os.path.join("input", "id_targets"),
     "auto_uploads": os.path.join("input", "auto_uploads"),
 }
+
+MAX_FILES_PER_UPLOAD = 100
+MAX_FILE_SIZE = 50 * 1024 * 1024
+MAX_TOTAL_UPLOAD_BYTES = 500 * 1024 * 1024
+
+_SAFE_FILENAME_RE = re.compile(r'^[a-zA-Z0-9_\-.()\[\] ]+$')
+
+
+def _safe_filename(name: str) -> str:
+    name = os.path.basename(name)
+    name = name.replace(" ", "_")
+    name = re.sub(r'[^\w.\-()\[\]]', '_', name)
+    return name[:255]
 
 
 @router.get("/{category}/image/{filename:path}")
@@ -47,7 +60,7 @@ async def get_image(category: str, filename: str, thumb: bool = Query(False)):
 
 
 @router.get("/{category}")
-async def list_images(category: str):
+async def list_images(category: str, request: Request):
     if category not in CATEGORIES:
         return JSONResponse({"error": f"Invalid category: {category}"}, status_code=400)
 
@@ -73,22 +86,25 @@ async def upload_images(category: str, request: Request, files: list[UploadFile]
     if category not in CATEGORIES:
         return JSONResponse({"error": f"Invalid category: {category}"}, status_code=400)
 
-    ip = request.client.host if request.client else "unknown"
-    fp = getattr(request.state, "fingerprint", "")
-    if not is_admin_token(request.headers.get("x-admin-token", "")) and fp:
-        if is_over_queue_limit(ip, fp):
-            return JSONResponse({"error": "服务器繁忙, 请稍后再试"}, status_code=503)
+    total_files = len(files)
+    if total_files > MAX_FILES_PER_UPLOAD:
+        return JSONResponse({"error": f"单次上传文件数量不能超过 {MAX_FILES_PER_UPLOAD}"}, status_code=413)
+
     contents: list[tuple[str, bytes]] = []
     total_bytes = 0
     skipped_invalid: list[str] = []
     for file in files:
         if not file.filename:
             continue
-        ext = os.path.splitext(file.filename)[1].lower()
+        fname = _safe_filename(file.filename)
+        ext = os.path.splitext(fname)[1].lower()
         if ext not in IMAGE_EXTENSIONS:
             skipped_invalid.append(file.filename)
             continue
         data = await file.read()
+        if len(data) > MAX_FILE_SIZE:
+            skipped_invalid.append(file.filename)
+            continue
         try:
             from PIL import Image
             import io
@@ -97,17 +113,13 @@ async def upload_images(category: str, request: Request, files: list[UploadFile]
         except Exception:
             skipped_invalid.append(file.filename)
             continue
-        contents.append((file.filename, data))
+        contents.append((fname, data))
         total_bytes += len(data)
+        if total_bytes > MAX_TOTAL_UPLOAD_BYTES:
+            break
 
     if total_bytes == 0:
         return {"uploaded": [], "count": 0, "skipped": skipped_invalid}
-
-    if not is_admin_token(request.headers.get("x-admin-token", "")):
-        ok, remaining, _ = check_upload(ip, total_bytes)
-        if not ok:
-            return JSONResponse({"error": "上传配额已用尽，请等待额度刷新", "remaining": remaining}, status_code=429)
-        record_upload(ip, total_bytes)
 
     folder = CATEGORIES[category]
     os.makedirs(folder, exist_ok=True)
@@ -126,8 +138,6 @@ async def upload_images(category: str, request: Request, files: list[UploadFile]
 async def delete_image(category: str, filename: str, request: Request):
     if category not in CATEGORIES:
         return JSONResponse({"error": f"Invalid category: {category}"}, status_code=400)
-    if not is_admin_token(request.headers.get("x-admin-token", "")):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     folder_real = os.path.realpath(CATEGORIES[category])
     fpath = os.path.normpath(os.path.join(CATEGORIES[category], filename))

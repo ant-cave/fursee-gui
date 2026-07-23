@@ -1,26 +1,6 @@
 <template>
   <div class="auto-page">
 
-    <!-- Quota bar (always visible) -->
-    <n-card class="mb-12" size="small" :bordered="false" style="background:#fafafa">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;color:#666">
-        <Upload :size="14" style="display:inline" /><span :style="{color: quota.upload_remaining < 1048576 ? '#e65' : '#666'}"> {{ formatBytes(quota.upload_remaining) }}/{{ formatBytes(quota.upload_max) }}</span>
-        <span v-if="quota.upload_reset_in > 0" style="color:#999"><Timer :size="14" style="display:inline" />{{ uploadCountdown }}</span>
-        <Zap :size="14" style="display:inline" /><span :style="{color: quota.task_remaining < 2 ? '#e65' : '#666'}"> {{ quota.task_remaining }}/{{ quota.task_max }}{{ t('auto.quota_tasks') }}</span>
-        <span v-if="quota.task_reset_in > 0" style="color:#999"><Timer :size="14" style="display:inline" />{{ taskCountdown }}</span>
-        <div style="flex:1" />
-        <template v-if="isAdmin">
-          <span style="color:#1890ff">{{ t('auto.admin_unlimited') }}</span>
-          <n-button size="tiny" @click="logoutAdmin">{{ t('auto.logout') }}</n-button>
-        </template>
-        <template v-else>
-          <n-input v-model:value="adminTokenInput" :placeholder="t('auto.admin_token_placeholder')" size="tiny" style="width:120px" />
-          <n-button size="tiny" @click="loginAdmin">{{ t('auto.login') }}</n-button>
-        </template>
-        <n-button size="tiny" @click="loadQuota">{{ t('auto.refresh') }}</n-button>
-      </div>
-    </n-card>
-
     <!-- Append mode indicator -->
     <n-card v-if="appendTargetId && !running" class="mb-12" size="small" :bordered="false" style="background:#fff7e6">
       <div style="display:flex;align-items:center;gap:8px;font-size:13px">
@@ -95,7 +75,7 @@
           <div class="result-title">{{ entry.name }}</div>
           <div class="result-grid">
             <div v-for="img in entry.images" :key="img" class="result-img-wrap">
-              <img :src="`/api/results/auto/run/${currentRun.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1${_fpSuffix}`" :alt="img" class="result-img" />
+              <img :src="`/api/results/auto/run/${currentRun.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1`" :alt="img" class="result-img" />
               <div class="result-label">{{ img }}</div>
             </div>
           </div>
@@ -116,7 +96,7 @@
               <div class="result-title">{{ entry.name }}</div>
               <div class="result-grid">
                 <div v-for="img in entry.images" :key="img" class="result-img-wrap">
-                  <img :src="`/api/results/auto/run/${run.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1${_fpSuffix}`" :alt="img" class="result-img" />
+                  <img :src="`/api/results/auto/run/${run.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1`" :alt="img" class="result-img" />
                   <div class="result-label">{{ img }}</div>
                 </div>
               </div>
@@ -126,39 +106,17 @@
       </template>
       <n-empty v-else :description="t('auto.no_history')" style="margin:20px 0" />
     </n-card>
-
-    <n-card v-if="isAdmin && queueData.length" title="排队队列" class="mb-12" size="small">
-      <template #header-extra><n-button size="tiny" @click="loadQueue">刷新队列</n-button></template>
-      <div class="queue-table">
-        <div class="queue-row queue-header">
-          <span class="q-ip">IP</span>
-          <span class="q-fp">指纹</span>
-          <span class="q-up">上传</span>
-          <span class="q-task">次数</span>
-          <span class="q-block">风控</span>
-        </div>
-        <div v-for="(item, i) in queueData" :key="i" class="queue-row" :class="{'queue-blocked': item.ip_blocked}">
-          <span class="q-ip" :title="item.ip">{{ item.ip.slice(0, 15) }}</span>
-          <span class="q-fp" :title="item.fp">{{ item.fp.slice(0, 12) }}...</span>
-          <span class="q-up" :class="item.upload_remaining > 0 ? 'q-ok' : 'q-full'">{{ formatBytes(item.upload_remaining) }}/{{ formatBytes(item.upload_max) }}</span>
-          <span class="q-task" :class="item.task_remaining > 0 ? 'q-ok' : 'q-full'">{{ item.task_remaining }}/{{ item.task_max }}</span>
-          <span class="q-block">{{ item.ip_blocked ? '🔴 超限' : '🟢 正常' }}</span>
-        </div>
-      </div>
-    </n-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
-const _fp = localStorage.getItem('fursee_fp') || ''
-const _fpSuffix = _fp ? `&fp=${encodeURIComponent(_fp)}` : ''
-import { Upload, Timer, Zap, Package, Trash2 } from '@lucide/vue'
+import { Upload, Package, Trash2 } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import {
   NCard, NButton, NProgress, NCollapse, NCollapseItem, NEmpty,
-  NSlider, NInputNumber, NInput, useMessage,
+  NSlider, NInputNumber, useMessage,
 } from 'naive-ui'
 import { useApi } from '@/composables/useApi'
 import { useWs, type ProgressEvent } from '@/composables/useWs'
@@ -205,72 +163,7 @@ const historyRuns = ref<AutoRun[]>([])
 
 const progressPct = computed(() => progress.value.total ? Math.round((progress.value.current / progress.value.total) * 100) : 0)
 
-const uploadCountdown = ref('')
-const taskCountdown = ref('')
-let countdownTimer: ReturnType<typeof setInterval> | null = null
-
-const isAdmin = ref(false)
-const adminTokenInput = ref('')
-const quota = ref({ upload_remaining: 0, upload_max: 0, upload_reset_in: 0, task_remaining: 0, task_max: 0, task_reset_in: 0 })
 const appendTargetId = ref('')
-interface QueueItem { ip: string; fp: string; upload_remaining: number; upload_max: number; task_remaining: number; task_max: number; ip_blocked: boolean }
-const queueData = ref<QueueItem[]>([])
-
-function formatBytes(b: number) {
-  if (b >= 1073741824) return (b / 1073741824).toFixed(1) + 'GB'
-  if (b >= 1048576) return (b / 1048576).toFixed(1) + 'MB'
-  if (b >= 1024) return (b / 1024).toFixed(0) + 'KB'
-  return b + 'B'
-}
-
-async function loginAdmin() {
-  if (!adminTokenInput.value) return
-  api.setAdminToken(adminTokenInput.value)
-  const res = await api.verifyAdmin()
-  if (res.admin) {
-    isAdmin.value = true
-    adminTokenInput.value = ''
-    msg.success(t('auto.admin_verified'))
-    loadQuota()
-  } else {
-    api.setAdminToken('')
-    msg.error(t('auto.admin_token_invalid'))
-  }
-}
-
-function logoutAdmin() {
-  api.setAdminToken('')
-  isAdmin.value = false
-}
-
-function formatCountdown(sec: number) {
-  if (sec <= 0) return ''
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = sec % 60
-  if (h > 0) return `${h}h${m}m`
-  if (m > 0) return `${m}m${s}s`
-  return `${s}s`
-}
-
-function startCountdown() {
-  if (countdownTimer) clearInterval(countdownTimer)
-  countdownTimer = setInterval(() => {
-    if (quota.value.upload_reset_in > 0) quota.value.upload_reset_in--
-    if (quota.value.task_reset_in > 0) quota.value.task_reset_in--
-    uploadCountdown.value = formatCountdown(quota.value.upload_reset_in)
-    taskCountdown.value = formatCountdown(quota.value.task_reset_in)
-  }, 1000)
-}
-
-async function loadQuota() {
-  try {
-    quota.value = await api.getQuota()
-    uploadCountdown.value = formatCountdown(quota.value.upload_reset_in)
-    taskCountdown.value = formatCountdown(quota.value.task_reset_in)
-    startCountdown()
-  } catch { console.warn('loadQuota failed') }
-}
 
 function setAppend(runId: string) {
   appendTargetId.value = runId
@@ -341,7 +234,6 @@ function handleProgress(e: ProgressEvent) {
 
 async function refreshAfterRun() {
   await loadHistory()
-  await loadQuota()
   if (historyRuns.value.length) {
     currentRun.value = historyRuns.value[historyRuns.value.length - 1]
     currentRunId.value = currentRun.value.run_id
@@ -364,19 +256,11 @@ async function deleteRun(runId: string) {
   finally { deleting.value = '' }
 }
 
-async function loadQueue() {
-  if (!isAdmin.value) return
-  try {
-    const { active_fps } = await api.getAdminQueue()
-    queueData.value = active_fps || []
-  } catch { queueData.value = [] }
-}
-
 async function downloadZip(runId: string) {
   zipping.value = true
   try {
     const a = document.createElement('a')
-    a.href = `/api/results/auto/run/${runId}/zip${_fpSuffix ? '?' + _fpSuffix.slice(1) : ''}`
+    a.href = `/api/results/auto/run/${runId}/zip`
     a.download = `auto_${runId}.zip`
     a.click()
   } catch (e: any) { msg.error(e.message) }
@@ -393,19 +277,6 @@ function resetCurrent() {
 
 onMounted(() => {
   loadHistory()
-  loadQuota()
-  loadQueue()
-  const saved = api.getAdminToken()
-  if (saved) {
-    api.verifyAdmin().then(r => {
-      if (r.admin) { isAdmin.value = true; loadQuota() }
-      else api.setAdminToken('')
-    })
-  }
-})
-
-onUnmounted(() => {
-  if (countdownTimer) clearInterval(countdownTimer)
 })
 </script>
 
@@ -433,17 +304,6 @@ onUnmounted(() => {
 .result-img { width:100%; height:100px; object-fit:cover; display:block; }
 .result-label { padding:2px 4px; font-size:10px; color:#666; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .current-run { border:1px solid #333 !important; }
-.queue-table { font-size:12px; }
-.queue-row { display:flex; gap:8px; padding:4px 0; border-bottom:1px solid #f0f0f0; align-items:center; }
-.queue-header { font-weight:600; color:#666; }
-.queue-blocked { background:#fff0f0; }
-.q-ip { width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.q-fp { width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.q-up { width:100px; }
-.q-task { width:60px; }
-.q-block { width:60px; }
-.q-ok { color:#52c41a; }
-.q-full { color:#e65; }
 @media (max-width:768px) {
   .param-row { flex-direction:column; gap:0; }
   .result-grid { grid-template-columns:repeat(3,1fr); }

@@ -32,27 +32,11 @@ def _serve_image(base_dir: str, path: str, thumb: bool = False):
     return FileResponse(full_path, media_type=media_type)
 
 
-def _fp_tag(request: Request) -> str:
-    fp = getattr(request.state, "fingerprint", "unknown")
-    if fp and fp != "unknown":
-        return f"fp_{fp}"
-    return ""
-
-
-def _auto_run_dir(request: Request) -> str:
-    tag = _fp_tag(request)
-    if tag:
-        return os.path.join(AUTO_ROOT, tag)
-    return AUTO_ROOT
-
-
 @router.get("/auto")
 async def list_auto_results(request: Request):
     from fursee_api.core.database import get_runs
-    fp = getattr(request.state, "fingerprint", "unknown")
-    runs = get_runs(fp)
+    runs = get_runs()
     return {
-        "fingerprint": fp,
         "runs": runs,
         "count": len(runs),
     }
@@ -61,8 +45,7 @@ async def list_auto_results(request: Request):
 @router.get("/auto/run/{run_id}")
 async def get_auto_run(run_id: str, request: Request):
     from fursee_api.core.database import get_run
-    fp = getattr(request.state, "fingerprint", "unknown")
-    run = get_run(fp, run_id)
+    run = get_run(run_id)
     if run is None:
         return JSONResponse({"error": "Run not found"}, status_code=404)
     return run
@@ -72,11 +55,10 @@ async def get_auto_run(run_id: str, request: Request):
 async def delete_auto_run(run_id: str, request: Request):
     import shutil
     from fursee_api.core.database import get_run, delete_run
-    fp = getattr(request.state, "fingerprint", "unknown")
-    run = get_run(fp, run_id)
+    run = get_run(run_id)
     if run is None:
         return JSONResponse({"error": "Run not found"}, status_code=404)
-    run_dir = os.path.join(_auto_run_dir(request), run_id)
+    run_dir = os.path.join(AUTO_ROOT, run_id)
     if os.path.isdir(run_dir):
         shutil.rmtree(run_dir, ignore_errors=True)
     buffer_path = run.get("buffer_path", "")
@@ -87,19 +69,19 @@ async def delete_auto_run(run_id: str, request: Request):
             return JSONResponse({"error": "Invalid buffer path"}, status_code=400)
         if os.path.isdir(buffer_path):
             shutil.rmtree(buffer_path, ignore_errors=True)
-    delete_run(fp, run_id)
+    delete_run(run_id)
     return {"deleted": run_id}
 
 
 @router.get("/auto/run/{run_id}/image/{path:path}")
 async def get_auto_run_image(run_id: str, path: str, request: Request, thumb: bool = Query(False)):
-    base_dir = os.path.join(_auto_run_dir(request), run_id)
+    base_dir = os.path.join(AUTO_ROOT, run_id)
     return _serve_image(base_dir, path, thumb=thumb)
 
 
 @router.get("/auto/run/{run_id}/zip")
 async def download_auto_run_zip(run_id: str, request: Request):
-    run_dir = os.path.join(_auto_run_dir(request), run_id)
+    run_dir = os.path.join(AUTO_ROOT, run_id)
     if not os.path.isdir(run_dir):
         return JSONResponse({"error": "Run not found"}, status_code=404)
     buf = io.BytesIO()

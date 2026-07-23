@@ -14,25 +14,19 @@ def _get_conn() -> sqlite3.Connection:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fingerprint TEXT NOT NULL,
-            run_id TEXT NOT NULL,
+            run_id TEXT NOT NULL UNIQUE,
             timestamp REAL NOT NULL,
             entries TEXT NOT NULL,
             total INTEGER NOT NULL,
             pipeline TEXT NOT NULL DEFAULT 'auto',
-            buffer_path TEXT NOT NULL DEFAULT '',
-            is_admin INTEGER NOT NULL DEFAULT 0,
-            UNIQUE(fingerprint, run_id)
+            buffer_path TEXT NOT NULL DEFAULT ''
         )
     """)
-    for col in ("pipeline TEXT NOT NULL DEFAULT 'auto'", "buffer_path TEXT NOT NULL DEFAULT ''", "is_admin INTEGER NOT NULL DEFAULT 0"):
+    for col in ("pipeline TEXT NOT NULL DEFAULT 'auto'", "buffer_path TEXT NOT NULL DEFAULT ''"):
         try:
             conn.execute(f"ALTER TABLE runs ADD COLUMN {col}")
         except sqlite3.OperationalError:
             pass
-    conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_runs_fingerprint ON runs(fingerprint)
-    """)
     conn.commit()
     return conn
 
@@ -43,7 +37,7 @@ def clean_old_runs():
     conn = _get_conn()
     try:
         rows = conn.execute(
-            "SELECT run_id, buffer_path FROM runs WHERE is_admin = 0 AND timestamp < ?",
+            "SELECT run_id, buffer_path FROM runs WHERE timestamp < ?",
             (cutoff,),
         ).fetchall()
         for row in rows:
@@ -51,14 +45,13 @@ def clean_old_runs():
             if bp and os.path.isdir(bp):
                 shutil.rmtree(bp, ignore_errors=True)
             classify_root = os.path.join(os.path.dirname(DB_PATH), "classify")
-            fp_dir = os.path.dirname(bp) if bp else ""
             for maybe_dir in os.listdir(classify_root) if os.path.isdir(classify_root) else []:
                 full = os.path.join(classify_root, maybe_dir)
                 if os.path.isdir(full):
                     sub = os.path.join(full, row["run_id"])
                     if os.path.isdir(sub):
                         shutil.rmtree(sub, ignore_errors=True)
-        conn.execute("DELETE FROM runs WHERE is_admin = 0 AND timestamp < ?", (cutoff,))
+        conn.execute("DELETE FROM runs WHERE timestamp < ?", (cutoff,))
         conn.commit()
     finally:
         conn.close()
@@ -70,17 +63,17 @@ def clean_old_runs():
                 os.remove(fpath)
 
 
-def add_run(fingerprint: str, run_id: str, timestamp: float,
+def add_run(run_id: str, timestamp: float,
             entries: list[dict], total: int, *,
-            pipeline: str = "auto", buffer_path: str = "", is_admin: bool = False):
+            pipeline: str = "auto", buffer_path: str = ""):
     conn = _get_conn()
     try:
         conn.execute(
-            "INSERT INTO runs (fingerprint, run_id, timestamp, entries, total, pipeline, buffer_path, is_admin) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (fingerprint, run_id, timestamp,
+            "INSERT INTO runs (run_id, timestamp, entries, total, pipeline, buffer_path) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (run_id, timestamp,
              json.dumps(entries, ensure_ascii=False), total,
-             pipeline, buffer_path, 1 if is_admin else 0),
+             pipeline, buffer_path),
         )
         conn.commit()
     except sqlite3.IntegrityError:
@@ -89,25 +82,23 @@ def add_run(fingerprint: str, run_id: str, timestamp: float,
         conn.close()
 
 
-def update_run(fingerprint: str, run_id: str, entries: list[dict],
+def update_run(run_id: str, entries: list[dict],
                total: int, timestamp: float, buffer_path: str = ""):
     conn = _get_conn()
     conn.execute(
         "UPDATE runs SET entries = ?, total = ?, timestamp = ?, buffer_path = ? "
-        "WHERE fingerprint = ? AND run_id = ?",
+        "WHERE run_id = ?",
         (json.dumps(entries, ensure_ascii=False), total, timestamp, buffer_path,
-         fingerprint, run_id),
+         run_id),
     )
     conn.commit()
     conn.close()
 
 
-def get_runs(fingerprint: str) -> list[dict]:
+def get_runs() -> list[dict]:
     conn = _get_conn()
     rows = conn.execute(
-        "SELECT run_id, timestamp, entries, total, pipeline, buffer_path FROM runs "
-        "WHERE fingerprint = ? ORDER BY id DESC",
-        (fingerprint,),
+        "SELECT run_id, timestamp, entries, total, pipeline, buffer_path FROM runs ORDER BY id DESC"
     ).fetchall()
     conn.close()
     return [
@@ -123,11 +114,11 @@ def get_runs(fingerprint: str) -> list[dict]:
     ]
 
 
-def delete_run(fingerprint: str, run_id: str) -> bool:
+def delete_run(run_id: str) -> bool:
     conn = _get_conn()
     cur = conn.execute(
-        "DELETE FROM runs WHERE fingerprint = ? AND run_id = ?",
-        (fingerprint, run_id),
+        "DELETE FROM runs WHERE run_id = ?",
+        (run_id,),
     )
     conn.commit()
     deleted = cur.rowcount > 0
@@ -135,12 +126,12 @@ def delete_run(fingerprint: str, run_id: str) -> bool:
     return deleted
 
 
-def get_run(fingerprint: str, run_id: str) -> dict | None:
+def get_run(run_id: str) -> dict | None:
     conn = _get_conn()
     row = conn.execute(
         "SELECT run_id, timestamp, entries, total, pipeline, buffer_path FROM runs "
-        "WHERE fingerprint = ? AND run_id = ?",
-        (fingerprint, run_id),
+        "WHERE run_id = ?",
+        (run_id,),
     ).fetchone()
     conn.close()
     if row is None:
