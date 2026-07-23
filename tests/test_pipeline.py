@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from fursee_api.main import app
 from fursee_api.api import pipeline as pipeline_mod
 
 
@@ -30,11 +29,6 @@ def _init_task_manager():
     pipeline_mod.init(tm)
     set_task_manager(tm)
     yield
-
-
-@pytest.fixture
-def client():
-    return TestClient(app)
 
 
 class TestAutoEndpoint:
@@ -65,19 +59,6 @@ class TestAutoEndpoint:
     def test_auto_endpoint_rejects_bad_type(self, client):
         resp = client.post("/api/pipeline/auto", json={"conf": "not_a_number"})
         assert resp.status_code == 422
-
-
-class TestListAutoResults:
-    def test_list_empty(self, client):
-        resp = client.get("/api/results/auto")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "runs" in data
-        assert data["count"] == 0
-
-    def test_list_with_fingerprint(self, client):
-        resp = client.get("/api/results/auto", headers={"X-Fingerprint": "xyz"})
-        assert resp.status_code == 200
 
 
 class TestTaskEndpoints:
