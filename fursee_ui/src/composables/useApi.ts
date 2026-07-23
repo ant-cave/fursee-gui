@@ -7,10 +7,12 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const fp = localStorage.getItem('fursee_fp')
-    if (fp) {
-      config.headers.set('X-Fingerprint', fp)
+    let fp = localStorage.getItem('fursee_fp')
+    if (!fp) {
+      fp = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 18)
+      localStorage.setItem('fursee_fp', fp)
     }
+    config.headers.set('X-Fingerprint', fp)
     return config
   },
   (err) => Promise.reject(err)

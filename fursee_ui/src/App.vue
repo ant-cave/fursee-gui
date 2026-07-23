@@ -62,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   NConfigProvider, NDialogProvider, NMessageProvider, NLayout, NLayoutSider,
@@ -71,12 +71,14 @@ import {
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { themeOverrides } from '@/styles/theme'
+import { useFingerprint } from '@/composables/useFingerprint'
 import { useWs } from '@/composables/useWs'
 
 const router = useRouter()
 const route = useRoute()
 const { t, locale } = useI18n()
 const { connected: wsConnected } = useWs()
+const { init: initFp } = useFingerprint()
 
 const showWs = ref(false)
 let wsTimer: ReturnType<typeof setTimeout> | null = null
@@ -89,6 +91,7 @@ watch(wsConnected, (v) => {
   }
 })
 onUnmounted(() => { if (wsTimer) clearTimeout(wsTimer) })
+onMounted(() => { initFp() })
 
 const menuOpen = ref(window.innerWidth > 768)
 
