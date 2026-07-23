@@ -12,6 +12,18 @@ router = APIRouter(prefix="/api/results", tags=["results"])
 AUTO_ROOT = os.path.join("output", "auto", "classify")
 
 
+def _resolve_run_dir(run_id: str) -> str | None:
+    direct = os.path.join(AUTO_ROOT, run_id)
+    if os.path.isdir(direct):
+        return direct
+    if os.path.isdir(AUTO_ROOT):
+        for entry in os.listdir(AUTO_ROOT):
+            candidate = os.path.join(AUTO_ROOT, entry, run_id)
+            if os.path.isdir(candidate):
+                return candidate
+    return None
+
+
 def _serve_image(base_dir: str, path: str, thumb: bool = False):
     full_path = os.path.normpath(os.path.join(base_dir, path))
     base_real = os.path.realpath(base_dir)
@@ -58,8 +70,8 @@ async def delete_auto_run(run_id: str, request: Request):
     run = get_run(run_id)
     if run is None:
         return JSONResponse({"error": "Run not found"}, status_code=404)
-    run_dir = os.path.join(AUTO_ROOT, run_id)
-    if os.path.isdir(run_dir):
+    run_dir = _resolve_run_dir(run_id)
+    if run_dir and os.path.isdir(run_dir):
         shutil.rmtree(run_dir, ignore_errors=True)
     buffer_path = run.get("buffer_path", "")
     buffer_root = os.path.realpath(os.path.join("buffer", "auto"))
@@ -75,13 +87,17 @@ async def delete_auto_run(run_id: str, request: Request):
 
 @router.get("/auto/run/{run_id}/image/{path:path}")
 async def get_auto_run_image(run_id: str, path: str, request: Request, thumb: bool = Query(False)):
-    base_dir = os.path.join(AUTO_ROOT, run_id)
-    return _serve_image(base_dir, path, thumb=thumb)
+    run_dir = _resolve_run_dir(run_id)
+    if run_dir is None:
+        return JSONResponse({"error": "Run not found"}, status_code=404)
+    return _serve_image(run_dir, path, thumb=thumb)
 
 
 @router.get("/auto/run/{run_id}/zip")
 async def download_auto_run_zip(run_id: str, request: Request):
-    run_dir = os.path.join(AUTO_ROOT, run_id)
+    run_dir = _resolve_run_dir(run_id)
+    if run_dir is None:
+        return JSONResponse({"error": "Run not found"}, status_code=404)
     if not os.path.isdir(run_dir):
         return JSONResponse({"error": "Run not found"}, status_code=404)
     buf = io.BytesIO()
