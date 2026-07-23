@@ -369,7 +369,7 @@ def cluster_feature_db(
         is_augmented=is_augmented,
     )
 
-    centroid_root = os.path.join(output_root, "centroids")
+    centroid_root = os.path.join(output_root, "代表图")
     centroid_count = copy_centroid_outputs(
         centroid_indices,
         keys,
