@@ -5,7 +5,7 @@ import sys
 from contextlib import asynccontextmanager
 import mimetypes
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -15,6 +15,7 @@ from fursee_api.api import images, pipeline, results
 from fursee_api.core.fingerprint import FingerprintMiddleware
 from fursee_api.core.task_manager import TaskManager
 from fursee_api.core.worker import process_pipeline, set_task_manager
+from fursee_api.core.ratelimit import get_quota
 
 
 task_manager = TaskManager()
@@ -54,6 +55,23 @@ DIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "furse
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+ADMIN_TOKEN = os.environ.get("FURSEE_ADMIN_TOKEN", "")
+
+
+@app.get("/api/admin/verify")
+async def admin_verify(request: Request):
+    token = request.headers.get("x-admin-token", "")
+    if not ADMIN_TOKEN:
+        return {"admin": False, "reason": "no_token_configured"}
+    return {"admin": token == ADMIN_TOKEN}
+
+
+@app.get("/api/quota")
+async def quota(request: Request):
+    ip = request.client.host if request.client else "unknown"
+    return get_quota(ip)
 
 
 @app.get("/api/stats")

@@ -17,9 +17,16 @@ def _get_conn() -> sqlite3.Connection:
             timestamp REAL NOT NULL,
             entries TEXT NOT NULL,
             total INTEGER NOT NULL,
+            pipeline TEXT NOT NULL DEFAULT 'auto',
+            buffer_path TEXT NOT NULL DEFAULT '',
             UNIQUE(fingerprint, run_id)
         )
     """)
+    for col in ("pipeline TEXT NOT NULL DEFAULT 'auto'", "buffer_path TEXT NOT NULL DEFAULT ''"):
+        try:
+            conn.execute(f"ALTER TABLE runs ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_runs_fingerprint ON runs(fingerprint)
     """)
@@ -28,14 +35,16 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def add_run(fingerprint: str, run_id: str, timestamp: float,
-            entries: list[dict], total: int):
+            entries: list[dict], total: int, *,
+            pipeline: str = "auto", buffer_path: str = ""):
     conn = _get_conn()
     try:
         conn.execute(
-            "INSERT INTO runs (fingerprint, run_id, timestamp, entries, total) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO runs (fingerprint, run_id, timestamp, entries, total, pipeline, buffer_path) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (fingerprint, run_id, timestamp,
-             json.dumps(entries, ensure_ascii=False), total),
+             json.dumps(entries, ensure_ascii=False), total,
+             pipeline, buffer_path),
         )
         conn.commit()
     except sqlite3.IntegrityError:
@@ -44,10 +53,23 @@ def add_run(fingerprint: str, run_id: str, timestamp: float,
         conn.close()
 
 
+def update_run(fingerprint: str, run_id: str, entries: list[dict],
+               total: int, timestamp: float, buffer_path: str = ""):
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE runs SET entries = ?, total = ?, timestamp = ?, buffer_path = ? "
+        "WHERE fingerprint = ? AND run_id = ?",
+        (json.dumps(entries, ensure_ascii=False), total, timestamp, buffer_path,
+         fingerprint, run_id),
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_runs(fingerprint: str) -> list[dict]:
     conn = _get_conn()
     rows = conn.execute(
-        "SELECT run_id, timestamp, entries, total FROM runs "
+        "SELECT run_id, timestamp, entries, total, pipeline, buffer_path FROM runs "
         "WHERE fingerprint = ? ORDER BY id ASC",
         (fingerprint,),
     ).fetchall()
@@ -58,15 +80,29 @@ def get_runs(fingerprint: str) -> list[dict]:
             "timestamp": row["timestamp"],
             "entries": json.loads(row["entries"]),
             "total": row["total"],
+            "pipeline": row["pipeline"],
+            "buffer_path": row["buffer_path"],
         }
         for row in rows
     ]
 
 
+def delete_run(fingerprint: str, run_id: str) -> bool:
+    conn = _get_conn()
+    cur = conn.execute(
+        "DELETE FROM runs WHERE fingerprint = ? AND run_id = ?",
+        (fingerprint, run_id),
+    )
+    conn.commit()
+    deleted = cur.rowcount > 0
+    conn.close()
+    return deleted
+
+
 def get_run(fingerprint: str, run_id: str) -> dict | None:
     conn = _get_conn()
     row = conn.execute(
-        "SELECT run_id, timestamp, entries, total FROM runs "
+        "SELECT run_id, timestamp, entries, total, pipeline, buffer_path FROM runs "
         "WHERE fingerprint = ? AND run_id = ?",
         (fingerprint, run_id),
     ).fetchone()
@@ -78,4 +114,6 @@ def get_run(fingerprint: str, run_id: str) -> dict | None:
         "timestamp": row["timestamp"],
         "entries": json.loads(row["entries"]),
         "total": row["total"],
+        "pipeline": row["pipeline"],
+        "buffer_path": row["buffer_path"],
     }

@@ -1,7 +1,36 @@
 <template>
   <div class="auto-page">
-    <n-card :title="$t('auto.title')" class="mb-12" v-if="!running && !currentRunId">
-      <div class="step-desc">{{ $t('auto.desc') }}</div>
+
+    <!-- Quota bar (always visible) -->
+    <n-card class="mb-12" size="small" :bordered="false" style="background:#fafafa">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;color:#666">
+        <span :style="{color: quota.upload_remaining < 1048576 ? '#e65' : '#666'}">📤 {{ formatBytes(quota.upload_remaining) }}/{{ formatBytes(quota.upload_max) }}</span>
+        <span :style="{color: quota.task_remaining < 2 ? '#e65' : '#666'}">⚡ {{ quota.task_remaining }}/{{ quota.task_max }} 次</span>
+        <span v-if="quota.next_reset_in > 0">⏳ {{ countdown }}</span>
+        <span v-else style="color:#999">额度充足</span>
+        <div style="flex:1" />
+        <template v-if="isAdmin">
+          <span style="color:#1890ff">管理员(无限)</span>
+          <n-button size="tiny" @click="logoutAdmin">退出</n-button>
+        </template>
+        <template v-else>
+          <n-input v-model:value="adminTokenInput" placeholder="管理员令牌" size="tiny" style="width:120px" />
+          <n-button size="tiny" @click="loginAdmin">登录</n-button>
+        </template>
+        <n-button size="tiny" @click="loadQuota">刷新</n-button>
+      </div>
+    </n-card>
+
+    <!-- Append mode indicator -->
+    <n-card v-if="appendTargetId && !running" class="mb-12" size="small" :bordered="false" style="background:#fff7e6">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+        <span>📎 将新图片追加至: <strong>{{ appendTargetId }}</strong></span>
+        <n-button size="tiny" @click="appendTargetId = ''">取消</n-button>
+      </div>
+    </n-card>
+
+    <n-card :title="appendTargetId ? '上传新图片' : $t('auto.title')" class="mb-12" v-if="!running && !currentRunId">
+      <div class="step-desc">{{ appendTargetId ? '选择要追加的图片，然后点击"追加识别"' : $t('auto.desc') }}</div>
 
       <div
         class="dropzone"
@@ -22,13 +51,13 @@
         </div>
       </div>
 
-      <div v-if="uploadCount && !running" class="upload-summary">
+      <div v-if="uploadCount" class="upload-summary">
         {{ $t('auto.uploaded', { n: uploadCount }) }}
       </div>
 
-      <div v-if="uploadCount && !running" class="action-bar">
+      <div v-if="uploadCount || appendTargetId" class="action-bar">
         <n-button type="primary" size="large" @click="startAuto" block style="height:44px;font-size:16px">
-          🚀 {{ $t('auto.start') }}
+          🚀 {{ appendTargetId ? '追加识别' : $t('auto.start') }}
         </n-button>
         <n-collapse style="margin-top:8px">
           <n-collapse-item :title="$t('auto.params_title')" name="p">
@@ -80,6 +109,7 @@
           <n-collapse-item v-for="run in historyRuns" :key="run.run_id" :title="`${run.run_id} · ${run.total} ${$t('auto.images')}`" :name="run.run_id">
             <div class="result-toolbar" style="margin-bottom:8px">
               <n-button size="tiny" @click="downloadZip(run.run_id)" :loading="zipping">📦 {{ $t('auto.download_zip') }}</n-button>
+              <n-button v-if="!running" size="tiny" @click="setAppend(run.run_id)">+ 追加图片</n-button>
             </div>
             <div v-for="entry in run.entries" :key="entry.name" style="margin-top:8px">
               <div class="result-title">{{ entry.name }}</div>
@@ -99,14 +129,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const _fp = localStorage.getItem('fursee_fp') || ''
 const _fpSuffix = _fp ? `&fp=${encodeURIComponent(_fp)}` : ''
 import { useI18n } from 'vue-i18n'
 import {
   NCard, NButton, NProgress, NCollapse, NCollapseItem, NEmpty,
-  NSlider, NInputNumber, useMessage,
+  NSlider, NInputNumber, NInput, useMessage,
 } from 'naive-ui'
 import { useApi } from '@/composables/useApi'
 import { useWs, type ProgressEvent } from '@/composables/useWs'
@@ -140,6 +170,75 @@ const historyRuns = ref<any[]>([])
 
 const progressPct = computed(() => progress.value.total ? Math.round((progress.value.current / progress.value.total) * 100) : 0)
 
+const countdown = ref('')
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+
+const isAdmin = ref(false)
+const adminTokenInput = ref('')
+const quota = ref({ upload_remaining: 0, upload_max: 0, task_remaining: 0, task_max: 0, next_reset_in: 0 })
+const appendTargetId = ref('')
+
+function formatBytes(b: number) {
+  if (b >= 1073741824) return (b / 1073741824).toFixed(1) + 'GB'
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + 'MB'
+  if (b >= 1024) return (b / 1024).toFixed(0) + 'KB'
+  return b + 'B'
+}
+
+async function loginAdmin() {
+  if (!adminTokenInput.value) return
+  api.setAdminToken(adminTokenInput.value)
+  const res = await api.verifyAdmin()
+  if (res.admin) {
+    isAdmin.value = true
+    adminTokenInput.value = ''
+    msg.success('管理员验证成功')
+    loadQuota()
+  } else {
+    api.setAdminToken('')
+    msg.error('令牌无效')
+  }
+}
+
+function logoutAdmin() {
+  api.setAdminToken('')
+  isAdmin.value = false
+}
+
+function formatCountdown(sec: number) {
+  if (sec <= 0) return ''
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (m > 0) return `${m}分${s}秒后刷新`
+  return `${s}秒后刷新`
+}
+
+function startCountdown() {
+  if (countdownTimer) clearInterval(countdownTimer)
+  countdownTimer = setInterval(() => {
+    if (quota.value.next_reset_in > 0) {
+      quota.value.next_reset_in--
+      countdown.value = formatCountdown(quota.value.next_reset_in)
+    }
+  }, 1000)
+}
+
+async function loadQuota() {
+  try {
+    quota.value = await api.getQuota()
+    countdown.value = formatCountdown(quota.value.next_reset_in)
+    startCountdown()
+  } catch {}
+}
+
+function setAppend(runId: string) {
+  appendTargetId.value = runId
+  currentRunId.value = ''
+  currentRun.value = null
+  logs.value = []
+  progress.value = { current: 0, total: 0 }
+}
+
 async function doUpload(files: FileList | File[]) {
   const arr = Array.from(files).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name))
   if (!arr.length) return
@@ -154,16 +253,18 @@ function onDrop(e: DragEvent) { dragOver.value = false; if (e.dataTransfer?.file
 function onFileChange(e: Event) { const t = e.target as HTMLInputElement; if (t.files) doUpload(t.files); t.value = '' }
 
 async function startAuto() {
-  if (!uploadCount.value) return
+  if (!uploadCount.value && !appendTargetId.value) return
   running.value = true; logs.value = []; progress.value = { current: 0, total: 0 }
   currentRunId.value = ''; currentRun.value = null
   currentStage.value = '📷 检测中'
   try {
-    const res = await api.startPipeline('auto', {
+    const params: Record<string, any> = {
       conf: conf.value, iou: iou.value,
       eps_start: epsStart.value, eps_stop: epsStop.value, eps_step: epsStep.value,
       use_augmentation: true, augmentation_count: 4,
-    })
+    }
+    if (appendTargetId.value) params.existing_run_id = appendTargetId.value
+    const res = await api.startPipeline('auto', params)
     connect(res.task_id, handleProgress)
   } catch (e: any) { msg.error(e.message); running.value = false }
 }
@@ -183,6 +284,7 @@ function handleProgress(e: ProgressEvent) {
     logs.value.push('✅ 全流程完成！')
     msg.success('全流程完成！')
     running.value = false
+    appendTargetId.value = ''
     refreshAfterRun()
   } else if (e.event === 'error') {
     logs.value.push(`❌ ${e.message}`)
@@ -192,6 +294,7 @@ function handleProgress(e: ProgressEvent) {
 
 async function refreshAfterRun() {
   await loadHistory()
+  await loadQuota()
   if (historyRuns.value.length) {
     currentRun.value = historyRuns.value[historyRuns.value.length - 1]
     currentRunId.value = currentRun.value.run_id
@@ -224,7 +327,21 @@ function resetCurrent() {
   progress.value = { current: 0, total: 0 }
 }
 
-onMounted(() => { loadHistory() })
+onMounted(() => {
+  loadHistory()
+  loadQuota()
+  const saved = api.getAdminToken()
+  if (saved) {
+    api.verifyAdmin().then(r => {
+      if (r.admin) { isAdmin.value = true; loadQuota() }
+      else api.setAdminToken('')
+    })
+  }
+})
+
+onUnmounted(() => {
+  if (countdownTimer) clearInterval(countdownTimer)
+})
 </script>
 
 <style scoped>

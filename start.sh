@@ -19,6 +19,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --api-only) API_ONLY=true; shift ;;
     --port) PORT="$2"; shift 2 ;;
+    --admin-token) export FURSEE_ADMIN_TOKEN="$2"; shift 2 ;;
     *) PORT="$1"; shift ;;
   esac
 done
