@@ -477,7 +477,6 @@ def _auto_run(params: dict) -> dict:
     from utils.vector_db import require_feature_db
     from utils.common import float_range, int_range
     from datetime import datetime
-    import json
     import os
 
     fingerprint = params.get("fingerprint", "unknown")
@@ -554,26 +553,15 @@ def _auto_run(params: dict) -> dict:
     from utils.common import reset_directory
     reset_directory(input_folder)
 
-    manifest_entry = {
-        "run_id": run_id,
-        "timestamp": datetime.now().timestamp(),
-        "entries": result_entries,
-        "total": sum(e["image_count"] for e in result_entries),
-    }
+    from fursee_api.core.database import add_run
 
-    manifest_dir = os.path.join(output_root, fp_tag) if fp_tag else output_root
-    os.makedirs(manifest_dir, exist_ok=True)
-    manifest_path = os.path.join(manifest_dir, "manifest.json")
-    manifest = {"runs": []}
-    if os.path.isfile(manifest_path):
-        try:
-            with open(manifest_path, "r") as f:
-                manifest = json.load(f)
-        except Exception:
-            manifest = {"runs": []}
-    manifest["runs"].append(manifest_entry)
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    add_run(
+        fingerprint=fingerprint if fingerprint != "unknown" else "unknown",
+        run_id=run_id,
+        timestamp=datetime.now().timestamp(),
+        entries=result_entries,
+        total=sum(e["image_count"] for e in result_entries),
+    )
 
     tq("完成！")
     return {

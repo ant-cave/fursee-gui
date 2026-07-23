@@ -1,5 +1,4 @@
 import io
-import json
 import os
 import zipfile
 
@@ -88,35 +87,26 @@ def _auto_run_dir(request: Request) -> str:
     return AUTO_ROOT
 
 
-def _load_manifest(request: Request) -> dict:
-    run_dir = _auto_run_dir(request)
-    manifest_path = os.path.join(run_dir, "manifest.json")
-    if not os.path.isfile(manifest_path):
-        return {"runs": []}
-    try:
-        with open(manifest_path, "r") as f:
-            return json.load(f)
-    except Exception:
-        return {"runs": []}
-
-
 @router.get("/auto")
 async def list_auto_results(request: Request):
-    manifest = _load_manifest(request)
+    from fursee_api.core.database import get_runs
+    fp = getattr(request.state, "fingerprint", "unknown")
+    runs = get_runs(fp)
     return {
-        "fingerprint": getattr(request.state, "fingerprint", "unknown"),
-        "runs": manifest.get("runs", []),
-        "count": len(manifest.get("runs", [])),
+        "fingerprint": fp,
+        "runs": runs,
+        "count": len(runs),
     }
 
 
 @router.get("/auto/run/{run_id}")
 async def get_auto_run(run_id: str, request: Request):
-    manifest = _load_manifest(request)
-    for run in manifest.get("runs", []):
-        if run["run_id"] == run_id:
-            return run
-    return JSONResponse({"error": "Run not found"}, status_code=404)
+    from fursee_api.core.database import get_run
+    fp = getattr(request.state, "fingerprint", "unknown")
+    run = get_run(fp, run_id)
+    if run is None:
+        return JSONResponse({"error": "Run not found"}, status_code=404)
+    return run
 
 
 @router.get("/auto/run/{run_id}/image/{path:path}")
