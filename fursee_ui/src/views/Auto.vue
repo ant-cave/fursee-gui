@@ -66,7 +66,7 @@
           <div class="result-title">{{ entry.name }}</div>
           <div class="result-grid">
             <div v-for="img in entry.images" :key="img" class="result-img-wrap">
-              <img :src="`/api/results/auto/run/${currentRun.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1`" :alt="img" class="result-img" />
+              <img :src="`/api/results/auto/run/${currentRun.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1${_fpSuffix}`" :alt="img" class="result-img" />
               <div class="result-label">{{ img }}</div>
             </div>
           </div>
@@ -85,7 +85,7 @@
               <div class="result-title">{{ entry.name }}</div>
               <div class="result-grid">
                 <div v-for="img in entry.images" :key="img" class="result-img-wrap">
-                  <img :src="`/api/results/auto/run/${run.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1`" :alt="img" class="result-img" />
+                  <img :src="`/api/results/auto/run/${run.run_id}/image/${entry.name}/${encodeURIComponent(img)}?thumb=1${_fpSuffix}`" :alt="img" class="result-img" />
                   <div class="result-label">{{ img }}</div>
                 </div>
               </div>
@@ -100,6 +100,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+
+const _fp = localStorage.getItem('fursee_fp') || ''
+const _fpSuffix = _fp ? `&fp=${encodeURIComponent(_fp)}` : ''
 import { useI18n } from 'vue-i18n'
 import {
   NCard, NButton, NProgress, NCollapse, NCollapseItem, NEmpty,
@@ -206,7 +209,7 @@ async function downloadZip(runId: string) {
   zipping.value = true
   try {
     const a = document.createElement('a')
-    a.href = `/api/results/auto/run/${runId}/zip`
+    a.href = `/api/results/auto/run/${runId}/zip${_fpSuffix ? '?' + _fpSuffix.slice(1) : ''}`
     a.download = `auto_${runId}.zip`
     a.click()
   } catch (e: any) { msg.error(e.message) }

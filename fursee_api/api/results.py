@@ -75,6 +75,8 @@ def _list_entries(base_dir: str):
 
 def _fp_tag(request: Request) -> str:
     fp = getattr(request.state, "fingerprint", "unknown")
+    if not fp or fp == "unknown":
+        fp = request.query_params.get("fp", "")
     if fp and fp != "unknown":
         return f"fp_{fp}"
     return ""
